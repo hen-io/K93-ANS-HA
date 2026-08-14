@@ -1,4 +1,3 @@
-"""Diagnostic sensors for K93 ANS."""
 from __future__ import annotations
 
 from datetime import timedelta
@@ -21,7 +20,6 @@ from .store import NotificationStore
 async def async_setup_entry(
     hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
 ) -> None:
-    """Set up K93 ANS diagnostic sensors."""
     store: NotificationStore = hass.data[DOMAIN][entry.entry_id]["store"]
     async_add_entities(
         [
@@ -42,20 +40,10 @@ def _local_date(record: NotificationRecord):
 
 
 def _history_records(store: NotificationStore) -> list[NotificationRecord]:
-    """Records eligible to count towards history-facing stats (mirrors the card's History list)."""
     return [r for r in store.async_list() if r.get("show_in_history", True)]
 
 
 class K93AnsSensorBase(SensorEntity):
-    """Shared setup for K93 ANS diagnostic sensors: one device, updated live - no polling.
-
-    Not poll-based at all: native_value is computed fresh from the in-memory store/entry.options
-    on every read (see each sensor's own native_value), so there's nothing to periodically
-    recompute in the background - only the *pushed state write* needs triggering, which happens
-    on every notification event via SIGNAL_UPDATED/SIGNAL_DELETED (see dispatch.py), plus once
-    immediately when the sensor is added (HA starting up, or an options-flow save reloading the
-    entry). K93AnsDatabaseSizeSensor overrides _async_refresh to also re-stat its file first.
-    """
 
     _attr_has_entity_name = True
     _attr_entity_category = EntityCategory.DIAGNOSTIC
@@ -88,7 +76,6 @@ class K93AnsSensorBase(SensorEntity):
 
 
 class K93AnsChannelsSensor(K93AnsSensorBase):
-    """Number of configured channels."""
 
     _attr_icon = "mdi:tune-vertical"
     _attr_state_class = SensorStateClass.MEASUREMENT
@@ -117,7 +104,6 @@ class K93AnsChannelsSensor(K93AnsSensorBase):
 
 
 class K93AnsRecipientsSensor(K93AnsSensorBase):
-    """Number of configured recipients."""
 
     _attr_icon = "mdi:account-multiple"
     _attr_state_class = SensorStateClass.MEASUREMENT
@@ -147,7 +133,6 @@ class K93AnsRecipientsSensor(K93AnsSensorBase):
 
 
 class K93AnsStoredSensor(K93AnsSensorBase):
-    """Total number of notifications kept in history."""
 
     _attr_icon = "mdi:database"
     _attr_state_class = SensorStateClass.MEASUREMENT
@@ -161,7 +146,6 @@ class K93AnsStoredSensor(K93AnsSensorBase):
 
 
 class K93AnsSentTodaySensor(K93AnsSensorBase):
-    """Notifications sent today (local time)."""
 
     _attr_icon = "mdi:calendar-today"
     _attr_state_class = SensorStateClass.MEASUREMENT
@@ -176,7 +160,6 @@ class K93AnsSentTodaySensor(K93AnsSensorBase):
 
 
 class K93AnsSentThisWeekSensor(K93AnsSensorBase):
-    """Notifications sent this week (local time, Monday-based)."""
 
     _attr_icon = "mdi:calendar-week"
     _attr_state_class = SensorStateClass.MEASUREMENT
@@ -192,7 +175,6 @@ class K93AnsSentThisWeekSensor(K93AnsSensorBase):
 
 
 class K93AnsSentThisMonthSensor(K93AnsSensorBase):
-    """Notifications sent this calendar month (local time)."""
 
     _attr_icon = "mdi:calendar-month"
     _attr_state_class = SensorStateClass.MEASUREMENT
@@ -212,7 +194,6 @@ class K93AnsSentThisMonthSensor(K93AnsSensorBase):
 
 
 class K93AnsUnacknowledgedSensor(K93AnsSensorBase):
-    """Notifications still awaiting acknowledgement."""
 
     _attr_icon = "mdi:bell-alert"
     _attr_state_class = SensorStateClass.MEASUREMENT
@@ -228,7 +209,6 @@ class K93AnsUnacknowledgedSensor(K93AnsSensorBase):
 
 
 class K93AnsDatabaseSizeSensor(K93AnsSensorBase):
-    """Size of the notification history file on disk (see Storage & history in the README)."""
 
     _attr_icon = "mdi:database-outline"
     _attr_device_class = SensorDeviceClass.DATA_SIZE

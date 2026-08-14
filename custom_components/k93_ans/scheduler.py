@@ -1,4 +1,3 @@
-"""Cron-based scheduled notifications for K93 ANS."""
 from __future__ import annotations
 
 import logging
@@ -19,12 +18,6 @@ _LOGGER = logging.getLogger(__name__)
 
 
 def _notification_data(scheduled: dict[str, Any]) -> dict[str, Any]:
-    """Build send_notification-shaped field data for one scheduled notification firing.
-
-    A scheduled notification only exposes the fields useful for a recurring reminder; anything
-    else (actions, image, data, live_id, ...) gets the same default SEND_NOTIFICATION_SCHEMA would
-    apply for a service call that omitted it, since _build_record expects every key to be present.
-    """
     return {
         "title": scheduled["title"],
         "message": scheduled["message"],
@@ -48,13 +41,6 @@ def _notification_data(scheduled: dict[str, Any]) -> dict[str, Any]:
 def async_setup_scheduled_notifications(
     hass: HomeAssistant, entry: ConfigEntry, store: NotificationStore
 ) -> Callable[[], None]:
-    """Schedule every enabled ScheduledNotification, rescheduling itself after each firing.
-
-    Returns one unsub callable that cancels every still-pending timer - call it on unload/reload.
-    Adding, editing, or removing a scheduled notification saves options, which reloads the whole
-    integration (see the options-change listener in __init__.py) and tears this down and rebuilds
-    it from the latest config - nothing here needs to react to config changes on its own.
-    """
     unsubs: list[Callable[[], None]] = []
 
     def _schedule(scheduled: dict[str, Any]) -> None:

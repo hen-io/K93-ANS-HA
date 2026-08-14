@@ -1,11 +1,9 @@
-"""Data shapes used by K93 ANS."""
 from __future__ import annotations
 
 from typing import Any, TypedDict
 
 
 class RecipientDelivery(TypedDict):
-    """Per-recipient delivery outcome for a notification."""
 
     notify_service: str
     matched: bool
@@ -15,7 +13,6 @@ class RecipientDelivery(TypedDict):
 
 
 class NotificationRecord(TypedDict):
-    """A single notification, as stored in the history."""
 
     id: str
     created: str
@@ -47,7 +44,6 @@ class NotificationRecord(TypedDict):
 
 
 class Recipient(TypedDict):
-    """A configured notification recipient."""
 
     id: str
     name: str
@@ -61,7 +57,6 @@ class Recipient(TypedDict):
 
 
 class Channel(TypedDict):
-    """A configured notification channel."""
 
     id: str
     key: str
@@ -74,7 +69,6 @@ class Channel(TypedDict):
 
 
 class ScheduledNotification(TypedDict):
-    """A recurring notification, fired on its own cron schedule (see scheduler.py)."""
 
     id: str
     name: str

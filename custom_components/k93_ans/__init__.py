@@ -1,4 +1,3 @@
-"""The K93 ANS notification integration."""
 from __future__ import annotations
 
 from datetime import timedelta
@@ -41,7 +40,6 @@ INACTIVITY_CHECK_INTERVAL = timedelta(minutes=1)
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    """Set up K93 ANS from a config entry."""
     store = NotificationStore(hass, entry.options.get(CONF_STORAGE_PATH))
     await store.async_load()
     await async_write_config_snapshot(hass, store, entry.options)
@@ -96,7 +94,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    """Unload a K93 ANS config entry."""
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     entry_data = hass.data[DOMAIN].pop(entry.entry_id, None)
     if entry_data is not None:
@@ -113,5 +110,4 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
 
 async def _async_reload_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
-    """Reload the config entry after its options change."""
     await hass.config_entries.async_reload(entry.entry_id)

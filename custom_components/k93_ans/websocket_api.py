@@ -1,4 +1,3 @@
-"""WebSocket API for the K93 ANS Lovelace card."""
 from __future__ import annotations
 
 import voluptuous as vol
@@ -12,7 +11,6 @@ from .store import NotificationStore
 
 
 def async_register_websocket_api(hass: HomeAssistant, store: NotificationStore) -> None:
-    """Register K93 ANS websocket commands."""
 
     @websocket_api.websocket_command(
         {

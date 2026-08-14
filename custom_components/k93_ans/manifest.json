@@ -1,12 +1,12 @@
 {
   "domain": "k93_ans",
   "name": "K93 Advanced Notification System",
-  "codeowners": ["@henriklud"],
+  "codeowners": ["@hen-io"],
   "config_flow": true,
-  "documentation": "https://github.com/henriklud/k93-ans",
+  "documentation": "https://github.com/hen-io/k93-ans",
   "iot_class": "local_push",
-  "issue_tracker": "https://github.com/henriklud/k93-ans/issues",
+  "issue_tracker": "https://github.com/hen-io/k93-ans/issues",
   "after_dependencies": ["mobile_app"],
   "requirements": ["croniter>=1.4.0"],
-  "version": "0.5.7"
+  "version": "0.5.8"
 }

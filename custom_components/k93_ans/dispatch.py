@@ -1,4 +1,3 @@
-"""Dispatch handling for incoming K93 ANS notification events."""
 from __future__ import annotations
 
 import asyncio
@@ -50,17 +49,10 @@ def _importance_rank(level: str) -> int:
 
 
 def _is_mobile_app_target(notify_service: str) -> bool:
-    """Heuristic: companion-app notify services are named mobile_app_<device>."""
     return notify_service.startswith("mobile_app_")
 
 
 def _recipient_targeted(recipient: dict[str, Any], target_recipients: list[str]) -> bool:
-    """Whether a recipient is included in a target_recipients list.
-
-    Matched by id (the stable value automations should use) or by the recipient's configured
-    name (case-insensitive) - the id is an opaque uuid a human can't easily look up, so the name
-    gives a usable value for anyone picking recipients by hand (e.g. in Developer Tools).
-    """
     targets = {t.strip().lower() for t in target_recipients if t and t.strip()}
     return (
         recipient["id"].lower() in targets
@@ -69,12 +61,6 @@ def _recipient_targeted(recipient: dict[str, Any], target_recipients: list[str])
 
 
 def _is_home(hass: HomeAssistant, recipient: dict[str, Any]) -> bool:
-    """Whether a recipient's assigned person is home.
-
-    Recipients with no person entity assigned aren't subject to the home_only filter at all -
-    there's nothing to check presence against - so this only returns False for a recipient that
-    *has* a person assigned and that person isn't home (or the entity is missing/unavailable).
-    """
     person_entity_id = recipient.get("person_entity_id")
     if not person_entity_id:
         return True
@@ -83,11 +69,6 @@ def _is_home(hass: HomeAssistant, recipient: dict[str, Any]) -> bool:
 
 
 def _resolve_image(record: NotificationRecord) -> str | None:
-    """The image (URL or HA-relative path, e.g. /local/...) to attach, if any.
-
-    Prefers the explicit `image` field. Falls back to a non-mdi `icon` for backward
-    compatibility with the earlier behavior where `icon` alone doubled as the picture.
-    """
     image = record.get("image")
     if image:
         return image
@@ -98,9 +79,6 @@ def _resolve_image(record: NotificationRecord) -> str | None:
 
 
 def _create_persistent_notification(hass: HomeAssistant, record: NotificationRecord) -> None:
-    """Create (or, reusing the same notification_id, update in place) the HA persistent
-    notification for a record, embedding its image as markdown if it has one since
-    persistent_notification has no dedicated image field."""
     message = record["message"]
     image = _resolve_image(record)
     if image:
@@ -111,7 +89,6 @@ def _create_persistent_notification(hass: HomeAssistant, record: NotificationRec
 
 
 def _build_notify_payload(record: NotificationRecord) -> dict[str, Any]:
-    """Build a plain notify.* payload for a generic (non companion-app) target."""
     return {
         "title": record["title"],
         "message": record["message"],
@@ -120,7 +97,6 @@ def _build_notify_payload(record: NotificationRecord) -> dict[str, Any]:
 
 
 def _build_mobile_app_payload(record: NotificationRecord, channel_name: str) -> dict[str, Any]:
-    """Build the notify.* payload for a mobile_app companion-app target."""
     data: dict[str, Any] = {
         "tag": record["id"],
         "channel": channel_name,
@@ -153,12 +129,6 @@ def _build_mobile_app_payload(record: NotificationRecord, channel_name: str) -> 
 async def async_handle_notification_event(
     hass: HomeAssistant, entry: ConfigEntry, store: NotificationStore, event: Event
 ) -> None:
-    """Handle a k93_ans_notification event.
-
-    Resolves the channel, filters configured recipients by importance/channel,
-    dispatches to matching notify.* targets, creates a persistent_notification
-    when required, and persists the resulting record to history.
-    """
     record: NotificationRecord = dict(event.data)
 
     previous = store.async_get(record["id"])
@@ -251,30 +221,12 @@ async def async_handle_notification_event(
 
 
 def async_restore_persistent_notifications(hass: HomeAssistant, store: NotificationStore) -> None:
-    """Recreate persistent_notifications for still-unacknowledged records after a restart.
-
-    HA's built-in persistent_notification system only lives in memory, so restarting HA clears
-    the bell entirely even though our own Store-backed history survives fine. Call this once at
-    setup, after the store has loaded, so anything still outstanding reappears in the bell using
-    the same notification_id it already had - it's exactly the same "create" call dispatch uses,
-    just replayed from history instead of triggered by a fresh event. Deliberately does NOT
-    re-dispatch to notify.* recipients: unlike persistent_notification, a companion app's pushed
-    notification isn't cleared by an HA restart, so re-sending it would just be a noisy duplicate.
-    """
     for record in store.async_list():
         if record.get("persistent") and not record.get("acknowledged"):
             _create_persistent_notification(hass, record)
 
 
 async def _send_clear_notification(hass: HomeAssistant, notify_service: str, record_id: str) -> None:
-    """Send the clear_notification command for one tag to one companion-app target.
-
-    blocking=True (unlike the fire-and-forget original dispatch) so a failure in the notify
-    platform itself actually raises here instead of being swallowed in a background task we never
-    awaited - that swallowing is why earlier failures never showed up in our own log. One retry
-    after a short delay covers a transient hiccup talking to FCM/APNs, the most likely cause of an
-    occasional silent no-op.
-    """
     for attempt in (1, 2):
         try:
             _LOGGER.debug(
@@ -304,12 +256,6 @@ async def _send_clear_notification(hass: HomeAssistant, notify_service: str, rec
 
 
 async def _clear_mobile_notifications(hass: HomeAssistant, record: NotificationRecord) -> None:
-    """Clear the pushed notification on every companion-app recipient that received it.
-
-    The companion apps recognize a notify call with message "clear_notification" plus a
-    matching "tag" as a command to remove that specific notification, rather than show a new
-    one - this is how an in-app/card acknowledgement also dismisses the phone's push banner.
-    """
     recipients = record.get("recipients") or {}
     _LOGGER.debug(
         "K93 ANS clearing pushed notifications for %s: recipients=%s",
@@ -341,15 +287,6 @@ async def _clear_mobile_notifications(hass: HomeAssistant, record: NotificationR
 async def async_clear_inactive_live_recipients(
     hass: HomeAssistant, entry: ConfigEntry, store: NotificationStore
 ) -> None:
-    """Clear a live notification's push for any recipient whose phone has gone inactive.
-
-    Called periodically (see __init__.py). Only touches still-live (unacknowledged, has a
-    live_id) notifications, and only recipients with an interactive_entity_id configured and a
-    non-zero CONF_LIVE_INACTIVITY_TIMEOUT_MINUTES - both opt-in, so this is a no-op for anyone who
-    hasn't set it up. Clears just that one recipient's push (not the whole notification, and
-    without marking it acknowledged) - other recipients, and the record's own live session,
-    aren't affected; a later real update/end_live_notification still reaches everyone as usual.
-    """
     timeout_minutes = entry.options.get(CONF_LIVE_INACTIVITY_TIMEOUT_MINUTES) or 0
     if timeout_minutes <= 0:
         return
@@ -401,11 +338,6 @@ async def async_clear_inactive_live_recipients(
 async def async_acknowledge(
     hass: HomeAssistant, store: NotificationStore, notification_id: str, via: str
 ) -> NotificationRecord | None:
-    """Acknowledge a notification, dismiss its persistent_notification, and notify listeners.
-
-    Shared by the k93_ans.acknowledge service and the mobile_app_notification_action
-    listener so the card and the phone stay in sync regardless of which side acked.
-    """
     record = await store.async_acknowledge(notification_id, via)
     if record is None:
         return None
@@ -433,15 +365,6 @@ async def async_acknowledge(
 def async_register_persistent_notification_listener(
     hass: HomeAssistant, store: NotificationStore
 ) -> Callable[[], None]:
-    """Acknowledge our own record when its persistent_notification is dismissed outside k93_ans.
-
-    HA's built-in notification drawer lets a user dismiss a persistent_notification directly -
-    that bypasses k93_ans.acknowledge, the card, and the mobile_app_notification_action listener
-    entirely, so without this the record would stay unacknowledged forever and the matching phone
-    push would never get cleared. Records our own acknowledge flow already dismissed are skipped
-    (they're already marked acknowledged by the time that dismiss fires this same signal), so this
-    doesn't loop back on itself.
-    """
 
     @callback
     def _on_update(update_type: UpdateType, notifications: dict[str, Any]) -> None:
@@ -459,14 +382,6 @@ def async_register_persistent_notification_listener(
 async def async_delete_notifications(
     hass: HomeAssistant, store: NotificationStore, notification_ids: list[str]
 ) -> list[str]:
-    """Delete notifications from history, cleaning up any still-live bell/push first.
-
-    Used for both a single delete (one id) and "clear history" (many ids). Deleting a
-    notification that's still outstanding also dismisses its persistent_notification and
-    clears any pushed companion-app notification, the same as acknowledging would - otherwise
-    it'd disappear from history while leaving an orphaned bell entry or phone notification with
-    nothing behind it. Returns the ids that actually existed and were removed.
-    """
     for notification_id in notification_ids:
         record = store.async_get(notification_id)
         if record is None:

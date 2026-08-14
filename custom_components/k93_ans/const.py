@@ -1,4 +1,3 @@
-"""Constants for the K93 ANS integration."""
 from __future__ import annotations
 
 import uuid
@@ -66,7 +65,6 @@ ACK_ACTION_LABELS = {"en": "Acknowledge", "no": "Bekreft"}
 
 
 def default_options() -> dict:
-    """Return a fresh copy of the default options structure, seeded with the built-in channels."""
     return {
         CONF_RECIPIENTS: [],
         CONF_SCHEDULED_NOTIFICATIONS: [],

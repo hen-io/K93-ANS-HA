@@ -1,4 +1,3 @@
-"""Config and options flow for K93 ANS."""
 from __future__ import annotations
 
 import logging
@@ -37,12 +36,10 @@ CHANNEL_IMPORTANCE_FIELD_PREFIX = "importance_for_"
 
 
 class K93AnsConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
-    """Handle a config flow for K93 ANS. Singleton - only one entry allowed."""
 
     VERSION = 1
 
     async def async_step_user(self, user_input: dict | None = None) -> config_entries.ConfigFlowResult:
-        """Handle the initial step."""
         await self.async_set_unique_id(DOMAIN)
         self._abort_if_unique_id_configured()
 
@@ -54,12 +51,10 @@ class K93AnsConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     @staticmethod
     @callback
     def async_get_options_flow(config_entry: ConfigEntry) -> K93AnsOptionsFlow:
-        """Get the options flow for this handler."""
         return K93AnsOptionsFlow()
 
 
 class K93AnsOptionsFlow(config_entries.OptionsFlow):
-    """Handle recipients/channels/advanced configuration."""
 
     def __init__(self) -> None:
         self._options: dict[str, Any] | None = None
@@ -79,7 +74,6 @@ class K93AnsOptionsFlow(config_entries.OptionsFlow):
 
 
     async def async_step_init(self, user_input: dict | None = None) -> config_entries.ConfigFlowResult:
-        """Show the main options menu."""
         self._ensure_options()
         return self.async_show_menu(
             step_id="init",
@@ -94,14 +88,12 @@ class K93AnsOptionsFlow(config_entries.OptionsFlow):
         )
 
     async def async_step_finish(self, user_input: dict | None = None) -> config_entries.ConfigFlowResult:
-        """Finish the options flow."""
         return self.async_create_entry(title="", data=self._ensure_options())
 
 
     async def async_step_manage_recipients(
         self, user_input: dict | None = None
     ) -> config_entries.ConfigFlowResult:
-        """Pick an existing recipient to edit, or add a new one."""
         options = self._ensure_options()
         recipients = options[CONF_RECIPIENTS]
 
@@ -130,7 +122,6 @@ class K93AnsOptionsFlow(config_entries.OptionsFlow):
     async def async_step_edit_recipient(
         self, user_input: dict | None = None
     ) -> config_entries.ConfigFlowResult:
-        """Add, edit or remove a single recipient."""
         options = self._ensure_options()
         recipients = options[CONF_RECIPIENTS]
         existing = next((r for r in recipients if r["id"] == self._editing_id), None)
@@ -243,7 +234,6 @@ class K93AnsOptionsFlow(config_entries.OptionsFlow):
     async def async_step_manage_channels(
         self, user_input: dict | None = None
     ) -> config_entries.ConfigFlowResult:
-        """Pick an existing channel to edit, or add a new one."""
         options = self._ensure_options()
         channels = options[CONF_CHANNELS]
 
@@ -272,7 +262,6 @@ class K93AnsOptionsFlow(config_entries.OptionsFlow):
     async def async_step_edit_channel(
         self, user_input: dict | None = None
     ) -> config_entries.ConfigFlowResult:
-        """Add, edit or remove a single channel."""
         options = self._ensure_options()
         channels = options[CONF_CHANNELS]
         existing = next((c for c in channels if c["id"] == self._editing_id), None)
@@ -368,7 +357,6 @@ class K93AnsOptionsFlow(config_entries.OptionsFlow):
     async def async_step_manage_scheduled(
         self, user_input: dict | None = None
     ) -> config_entries.ConfigFlowResult:
-        """Pick an existing scheduled notification to edit, or add a new one."""
         options = self._ensure_options()
         scheduled = options[CONF_SCHEDULED_NOTIFICATIONS]
 
@@ -399,7 +387,6 @@ class K93AnsOptionsFlow(config_entries.OptionsFlow):
     async def async_step_edit_scheduled(
         self, user_input: dict | None = None
     ) -> config_entries.ConfigFlowResult:
-        """Add, edit or remove a single scheduled notification."""
         options = self._ensure_options()
         scheduled_list = options[CONF_SCHEDULED_NOTIFICATIONS]
         existing = next((s for s in scheduled_list if s["id"] == self._editing_id), None)
@@ -500,7 +487,6 @@ class K93AnsOptionsFlow(config_entries.OptionsFlow):
     async def async_step_manage_calendar(
         self, user_input: dict | None = None
     ) -> config_entries.ConfigFlowResult:
-        """Pick an existing calendar notification to edit, or add a new one."""
         options = self._ensure_options()
         calendar_notifications = options[CONF_CALENDAR_NOTIFICATIONS]
 
@@ -531,7 +517,6 @@ class K93AnsOptionsFlow(config_entries.OptionsFlow):
     async def async_step_edit_calendar(
         self, user_input: dict | None = None
     ) -> config_entries.ConfigFlowResult:
-        """Add, edit or remove a single calendar notification."""
         options = self._ensure_options()
         calendar_list = options[CONF_CALENDAR_NOTIFICATIONS]
         existing = next((c for c in calendar_list if c["id"] == self._editing_id), None)
@@ -645,7 +630,6 @@ class K93AnsOptionsFlow(config_entries.OptionsFlow):
     async def async_step_advanced(
         self, user_input: dict | None = None
     ) -> config_entries.ConfigFlowResult:
-        """Configure history retention and notification-payload language."""
         options = self._ensure_options()
 
         if user_input is not None:

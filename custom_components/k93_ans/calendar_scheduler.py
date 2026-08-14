@@ -1,5 +1,3 @@
-"""Calendar-triggered notifications for K93 ANS - fires a notification when a configured
-calendar entity's event becomes active."""
 from __future__ import annotations
 
 import logging
@@ -19,12 +17,6 @@ _LOGGER = logging.getLogger(__name__)
 
 
 def _notification_data(calendar_notification: dict[str, Any], state: State) -> dict[str, Any]:
-    """Build send_notification-shaped field data for one calendar event firing.
-
-    Falls back to the calendar event's own summary/description (state.attributes["message"]/
-    ["description"]) when the config's title/message are left blank - the point of a calendar
-    trigger is usually "tell me what's on the calendar", not a fixed static text every time.
-    """
     attrs = state.attributes
     title = calendar_notification.get("title") or attrs.get("message") or calendar_notification["name"]
     message = calendar_notification.get("message") or attrs.get("description") or attrs.get("message") or ""
@@ -49,7 +41,6 @@ def _notification_data(calendar_notification: dict[str, Any], state: State) -> d
 
 
 def _all_day_target(all_day_time: str, now: datetime) -> datetime:
-    """Today's occurrence of all_day_time ("HH:MM:SS"), in now's timezone."""
     hour, minute, second = (int(part) for part in all_day_time.split(":"))
     return now.replace(hour=hour, minute=minute, second=second, microsecond=0)
 
@@ -57,15 +48,6 @@ def _all_day_target(all_day_time: str, now: datetime) -> datetime:
 def async_setup_calendar_notifications(
     hass: HomeAssistant, entry: ConfigEntry, store: NotificationStore
 ) -> Callable[[], None]:
-    """Watch every configured calendar entity and fire a notification when its event becomes
-    active - immediately for a normal (timed) event, or at a configurable time of day for an
-    all-day event (HA reports those "on" starting at midnight local time, too early to be a
-    useful notification moment on its own).
-
-    Returns one unsub callable that cancels every listener/pending timer - call it on
-    unload/reload. Like the cron scheduler, editing a calendar notification's config saves
-    options, which reloads the whole integration and rebuilds this from scratch.
-    """
     unsubs: list[Callable[[], None]] = []
     pending_all_day: dict[str, Callable[[], None]] = {}
 
@@ -80,8 +62,6 @@ def async_setup_calendar_notifications(
         )
 
     async def _handle_active(calendar_notification: dict[str, Any], state: State) -> None:
-        """state.state is "on" for calendar_notification's entity - fire now, or schedule for
-        all_day_time if this is an all-day event."""
         config_id = calendar_notification["id"]
         if not state.attributes.get("all_day"):
             await _fire(calendar_notification, state)

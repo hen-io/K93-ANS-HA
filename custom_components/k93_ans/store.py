@@ -1,4 +1,3 @@
-"""Storage layer for K93 ANS notification history (SQLite-backed)."""
 from __future__ import annotations
 
 import json
@@ -34,13 +33,6 @@ def _importance_rank(level: str) -> int:
 
 
 def _resolve_storage_dir(hass: HomeAssistant, storage_path: str | None) -> Path:
-    """The effective storage directory for `storage_path` (blank = the dedicated default).
-
-    Falls back to the default directory if the configured one already exists as a *file* rather
-    than a directory (e.g. storage_path was set to the old .storage/k93_ans_notifications path
-    itself, from before this was a folder) - trying to mkdir over an existing file would raise and
-    leave the store unable to load or save anything, silently "losing" all history until fixed.
-    """
     default_dir = Path(hass.config.path(DEFAULT_STORAGE_DIR_NAME))
     if not storage_path:
         return default_dir
@@ -64,21 +56,6 @@ def _resolve_storage_dir(hass: HomeAssistant, storage_path: str | None) -> Path:
 
 
 def _migrate_storage_dir(hass: HomeAssistant, effective_dir: Path) -> None:
-    """Move the previous default folder's contents into effective_dir if storage_path was just
-    pointed somewhere else and effective_dir doesn't have its own database yet.
-
-    This only handles the "storage_path changed" case - relocating an entire folder's worth of
-    files (not just history) from the default dedicated folder to a newly-chosen custom one.
-    Moving directly between two different custom paths isn't migrated automatically - there's no
-    reliable way to know what the previous custom path even was.
-
-    Recovering the pre-dedicated-folder, pre-SQLite `.storage/k93_ans_notifications` file (from
-    HA's own Store helper) is handled separately by _import_legacy_json, not here - deliberately
-    not gated on whether database.db already exists, since an earlier version of this migration
-    logic could leave a *blank* database.db behind (e.g. it failed to unwrap Store's wrapper
-    format and imported zero records) which would otherwise permanently block recovery on every
-    later load. See _import_legacy_json's docstring.
-    """
     db_file = effective_dir / CUSTOM_STORAGE_FILENAME
     if db_file.exists() or any((effective_dir / name).exists() for name in _LEGACY_JSON_FILENAMES):
         return
@@ -107,14 +84,6 @@ def _migrate_storage_dir(hass: HomeAssistant, effective_dir: Path) -> None:
 
 
 def _extract_notifications(data: Any) -> list[NotificationRecord]:
-    """Pull the notification list out of a legacy JSON file's parsed content.
-
-    Two shapes are recognized: this integration's own flat format, `{"notifications": [...]}`
-    (used by both legacy JSON filenames), and homeassistant.helpers.storage.Store's own wrapper,
-    `{"version": ..., "key": ..., "data": {"notifications": [...]}}` - the very first version of
-    K93 ANS stored history via that helper, so `.storage/k93_ans_notifications` still has this
-    wrapper around it, not the flat shape.
-    """
     if not isinstance(data, dict):
         return []
     if "notifications" in data:
@@ -128,23 +97,6 @@ def _extract_notifications(data: Any) -> list[NotificationRecord]:
 def _candidate_legacy_paths(
     hass: HomeAssistant, effective_dir: Path, *, include_migrated_backups: bool
 ) -> list[Path]:
-    """Every location plain-JSON (or the original Store-wrapped file) history has ever lived at,
-    in the order they should be tried.
-
-    Deliberately *not* gated on any "has this already been relocated/renamed" bookkeeping - only
-    on whether the file itself still exists under a not-yet-".migrated" name (which is the actual
-    signal that it hasn't been successfully consumed yet). This integration has been through
-    several storage-format changes (raw Store file -> flat JSON in a dedicated folder, under two
-    different filenames -> SQLite), so a real instance can have leftover files in almost any
-    combination.
-
-    include_migrated_backups additionally re-checks the already-renamed "<name>.migrated" copies -
-    a past version of this migration could rename a source away without actually importing
-    anything usable from it (e.g. it didn't unwrap Store's own wrapper format), which would
-    otherwise strand that history forever. The caller only passes this when the notifications
-    table is still completely empty, so a record deliberately deleted by the user can't keep
-    reappearing on every restart just because its old backup file is still sitting there.
-    """
     dirs = [effective_dir]
     default_dir = Path(hass.config.path(DEFAULT_STORAGE_DIR_NAME))
     if default_dir != effective_dir:
@@ -166,20 +118,6 @@ def _candidate_legacy_paths(
 def _import_legacy_json(
     hass: HomeAssistant, effective_dir: Path, *, include_migrated_backups: bool = True
 ) -> list[NotificationRecord]:
-    """Recover pre-SQLite history from every known legacy location that actually has it.
-
-    Checks every filename/location this history has ever lived under - see
-    _candidate_legacy_paths - and accumulates records from *all* of them that yield at least one
-    (not just the first hit), deduped by id, since more than one can genuinely hold different real
-    history at once (this integration has changed storage format several times over its life). A
-    candidate that exists but is empty, unreadable, or in an unrecognized shape is skipped rather
-    than treated as final, so it can't hide real history sitting at another candidate.
-
-    Renames whichever file(s) it successfully imports from to "<name>.migrated" in place
-    afterward, kept as a backup rather than deleted - re-reading/rewriting that whole file on
-    every event was the exact bottleneck this migration exists to get away from for ongoing use,
-    but there's no reason to touch it more than this one time.
-    """
     collected: dict[str, NotificationRecord] = {}
     for legacy_path in _candidate_legacy_paths(
         hass, effective_dir, include_migrated_backups=include_migrated_backups
@@ -219,26 +157,6 @@ def _import_legacy_json(
 
 
 class NotificationStore:
-    """SQLite-backed notification history, at "<storage directory>/database.db".
-
-    The full history is also kept in memory (self._notifications, newest first) - every read
-    method (async_get, async_list, etc.) is synchronous and reads straight from that list, exactly
-    like before this was SQLite-backed, so none of the many callers throughout the integration
-    (dispatch.py, services.py, sensor.py, websocket_api.py - several of which call these
-    synchronously, without `await`) needed to change. What changed is persistence: each write
-    (add/acknowledge/delete/prune) now does a small, targeted SQLite statement instead of
-    rewriting the *entire* history to disk on every single notification event - the previous
-    JSON-file design did a full rewrite every time, which scales badly once history grows into the
-    tens of thousands of records (see the README's Storage & history section).
-
-    The storage directory defaults to a dedicated folder in the HA config directory (kept apart
-    from HA's own `.storage/` and every other integration's data, in case K93 ANS ever needs more
-    than just this one file down the line) - overridable via the `storage_path` option, which
-    only takes effect on the next integration setup (see __init__.py's options-change reload
-    listener - saving Advanced settings already triggers that automatically). Whichever directory
-    turns out to be effective, existing history is migrated into it automatically - see
-    _migrate_storage_dir and _import_legacy_json.
-    """
 
     def __init__(self, hass: HomeAssistant, storage_path: str | None = None) -> None:
         self._hass = hass
@@ -249,18 +167,10 @@ class NotificationStore:
 
     @property
     def storage_dir(self) -> Path:
-        """The effective, already-resolved storage directory - see _resolve_storage_dir. Exposed
-        so other modules (e.g. config_snapshot.py) can write alongside database.db without
-        re-resolving storage_path themselves."""
         return self._dir
 
 
     def _connect(self) -> sqlite3.Connection:
-        """A fresh connection per call, not a shared one - sqlite3 connections aren't safe to use
-        across threads, and each of these calls runs in a different executor thread. Opening one
-        is fast; the CREATE-IF-NOT-EXISTS statements are cheap idempotent no-ops once the schema
-        already exists.
-        """
         self._dir.mkdir(parents=True, exist_ok=True)
         conn = sqlite3.connect(self._db_path)
         conn.execute(
@@ -281,7 +191,6 @@ class NotificationStore:
         return conn
 
     def _load_all(self) -> list[NotificationRecord]:
-        """Blocking full read, newest first - only called once, at startup (async_load)."""
         _migrate_storage_dir(self._hass, self._dir)
         conn = self._connect()
         try:
@@ -303,7 +212,6 @@ class NotificationStore:
         return records
 
     def _upsert(self, record: NotificationRecord) -> None:
-        """Blocking single-row insert-or-replace."""
         conn = self._connect()
         try:
             conn.execute(
@@ -335,7 +243,6 @@ class NotificationStore:
             conn.close()
 
     def _delete_ids(self, ids: list[str]) -> None:
-        """Blocking batch delete."""
         if not ids:
             return
         conn = self._connect()
@@ -349,27 +256,15 @@ class NotificationStore:
 
 
     async def async_load(self) -> None:
-        """Load persisted notifications from disk."""
         self._notifications = await self._hass.async_add_executor_job(self._load_all)
 
     def file_size_bytes(self) -> int:
-        """Blocking Path.stat() - call via hass.async_add_executor_job (see sensor.py)."""
         try:
             return self._db_path.stat().st_size
         except OSError:
             return 0
 
     async def async_add(self, record: NotificationRecord) -> None:
-        """Add a new notification record, replacing one with the same id if it already exists.
-
-        The replace path is what makes "live" notifications (see live_id) work: repeated
-        send_notification calls for the same live_id reuse the same underlying id, so this
-        refreshes that one history entry instead of piling up a new row per update. The updated
-        record is (re)inserted at the front rather than left at its old position, so an actively
-        updating live notification keeps sorting as the most recent thing that happened instead
-        of sitting wherever it was first created - which matters because `async_list`'s `limit`
-        would otherwise let a still-live notification silently scroll out of a bounded fetch.
-        """
         live_id = record.get("live_id")
         if live_id and self._pending_live.get(live_id, (None, None))[0] == record["id"]:
             del self._pending_live[live_id]
@@ -378,38 +273,21 @@ class NotificationStore:
         await self._hass.async_add_executor_job(self._upsert, record)
 
     async def async_update_record(self, record: NotificationRecord) -> None:
-        """Persist a record already mutated in place by the caller (its position in the
-        in-memory list, and the list itself, are untouched - only the on-disk copy is refreshed).
-        Used where a record's own dict is mutated directly rather than going through async_add/
-        async_acknowledge (see dispatch.py's async_clear_inactive_live_recipients).
-        """
         await self._hass.async_add_executor_job(self._upsert, record)
 
     def async_get(self, notification_id: str) -> NotificationRecord | None:
-        """Return a single notification by id, if present."""
         for record in self._notifications:
             if record["id"] == notification_id:
                 return record
         return None
 
     def async_get_by_live_id(self, live_id: str) -> NotificationRecord | None:
-        """Return the active (unacknowledged) live notification for live_id, if any."""
         for record in self._notifications:
             if record.get("live_id") == live_id and not record["acknowledged"]:
                 return record
         return None
 
     def async_resolve_live_notification(self, live_id: str) -> dict[str, str] | None:
-        """Return the {id, created} to reuse for this live_id, or None for a genuinely new session.
-
-        Checks an already-stored active record first, then falls back to a reservation made by a
-        send_notification call that's still in flight through the event pipeline (see
-        async_reserve_live_id). Without that second check, two send_notification calls for the
-        same live_id in quick succession - e.g. a burst of trigger firings right after an HA
-        restart - could both see "nothing stored yet" and each mint their own id: two distinct
-        notifications/phone pushes for what should be one live session, with only the second ever
-        receiving further updates (the first is silently orphaned).
-        """
         existing = self.async_get_by_live_id(live_id)
         if existing:
             return {"id": existing["id"], "created": existing["created"]}
@@ -419,10 +297,6 @@ class NotificationStore:
         return None
 
     def async_reserve_live_id(self, live_id: str, notification_id: str, created: str) -> None:
-        """Record that `notification_id` is the id in use for `live_id`, before it's stored.
-
-        Cleared automatically once that id is actually stored (see async_add).
-        """
         self._pending_live[live_id] = (notification_id, created)
 
     def async_list(
@@ -433,16 +307,6 @@ class NotificationStore:
         channel_mode: str = "include",
         min_importance: str | None = None,
     ) -> list[NotificationRecord]:
-        """Return notifications, newest first.
-
-        channels/channel_mode/min_importance let a caller (the card's History/ticker fetch) ask
-        for the most recent `limit` records that already match a filter, instead of the most
-        recent `limit` records overall filtered afterwards - the latter lets a handful of noisy
-        channels crowd a rarer one out of the fetch window entirely, even though it has plenty of
-        history further back. Compared case-insensitively since a channel key is always
-        lowercased when saved (see config_flow.py) but older stored records may not be (fixed
-        going forward in services.py).
-        """
         records = self._notifications
         if not include_acknowledged:
             records = [r for r in records if not r["acknowledged"]]
@@ -466,10 +330,6 @@ class NotificationStore:
     async def async_acknowledge(
         self, notification_id: str, via: str
     ) -> NotificationRecord | None:
-        """Mark a notification as acknowledged.
-
-        Returns the updated record, or None if it doesn't exist.
-        """
         record = self.async_get(notification_id)
         if record is None:
             return None
@@ -480,7 +340,6 @@ class NotificationStore:
         return record
 
     async def async_delete(self, notification_ids: list[str]) -> list[str]:
-        """Delete notifications by id. Returns the ids that actually existed and were removed."""
         id_set = set(notification_ids)
         deleted = [r["id"] for r in self._notifications if r["id"] in id_set]
         if deleted:
@@ -489,13 +348,6 @@ class NotificationStore:
         return deleted
 
     def async_history_ids(self, include_unacknowledged: bool = False) -> list[str]:
-        """Return ids eligible for a "clear history" action.
-
-        By default only ids of notifications that aren't still actively pending acknowledgement -
-        the same (not requires_ack) or acknowledged rule the History section itself uses - so
-        clearing history never silently makes a still-outstanding notification disappear.
-        Pass include_unacknowledged=True to include everything instead.
-        """
         if include_unacknowledged:
             return [r["id"] for r in self._notifications]
         return [r["id"] for r in self._notifications if not r["requires_ack"] or r["acknowledged"]]
@@ -506,18 +358,6 @@ class NotificationStore:
         default_max_records: int,
         default_retention_days: int,
     ) -> None:
-        """Drop notifications older than their retention, then cap each channel's own count.
-
-        Both limits default to the global Advanced settings, but a channel can override either
-        (see config_flow.py's edit_channel step) - a noisy channel sending 100+ notifications
-        every few days can be capped tightly without starving a rarer, more important channel's
-        history of its own (larger) budget, and channels are pruned by age independently too, so
-        one being cleared out early doesn't need the same short retention forced onto another.
-        A record's *primary* channel (record["channel"], first of its "channels" if it has
-        several) decides which override applies - the same channel this integration already uses
-        for anything else that can only carry one value (Android's own notification channel, the
-        card's icon color).
-        """
         channel_lookup = {c["key"]: c for c in channel_defs}
         now = dt_util.utcnow()
 

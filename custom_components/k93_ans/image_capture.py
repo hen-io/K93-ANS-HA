@@ -1,5 +1,3 @@
-"""Captures a camera/image entity snapshot for use as a notification's image, and cleans up
-captured files that no longer belong to any stored notification."""
 from __future__ import annotations
 
 import logging
@@ -28,7 +26,6 @@ def _images_root(hass: HomeAssistant) -> Path:
 
 
 async def _fetch_image(hass: HomeAssistant, entity_id: str) -> tuple[bytes, str] | None:
-    """Fetch (content, content_type) from a camera.* or image.* entity, or None on failure."""
     domain = entity_id.split(".", 1)[0]
     try:
         if domain == "camera":
@@ -59,18 +56,6 @@ def _write_image(path: Path, content: bytes) -> None:
 async def async_capture_entity_image(
     hass: HomeAssistant, record: NotificationRecord, entity_id: str
 ) -> None:
-    """Fetch a snapshot from `entity_id` and set it as `record`'s image, saved under
-    /config/www/K93-Advanced-Notification-System/<channel>/.
-
-    Every capture gets its own uniquely-named file ("<id>_<timestamp>.<ext>") rather than
-    reusing/overwriting one per notification - a live notification's repeated updates each get a
-    fresh file and a fresh URL, so a phone or dashboard that cached the previous image under the
-    old URL always sees the new one. The tradeoff is that old captures pile up as a live
-    notification updates repeatedly; async_prune_orphaned_images (called from the hourly prune
-    cycle) deletes any captured file that isn't the current `image` of a still-stored notification.
-    Does nothing if `entity_id` can't be read - the notification still sends, just without a
-    picture, same as an invalid `image` URL would.
-    """
     fetched = await _fetch_image(hass, entity_id)
     if fetched is None:
         return
@@ -115,12 +100,6 @@ def _delete_unreferenced(images_root: Path, referenced: set[Path]) -> int:
 
 
 async def async_prune_orphaned_images(hass: HomeAssistant, store: NotificationStore) -> None:
-    """Delete captured image files that aren't the current `image` of any stored notification.
-
-    Only ever touches files under the K93 ANS images folder, and only ones this integration
-    actually captured (record["image_managed"]) - a manually-specified `image` path is never
-    considered, matched, or deleted, regardless of where it points.
-    """
     referenced: set[Path] = set()
     for record in store.async_list():
         if not record.get("image_managed") or not record.get("image"):
