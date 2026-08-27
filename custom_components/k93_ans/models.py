@@ -38,6 +38,7 @@ class NotificationRecord(TypedDict):
     source: str | None
     target_recipients: list[str] | None
     home_only: bool
+    interactive_only: bool
     show_in_history: bool
     dismiss_on_action: bool
     clear_on_acknowledge: bool

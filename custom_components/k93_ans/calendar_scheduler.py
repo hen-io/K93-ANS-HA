@@ -33,6 +33,7 @@ def _notification_data(calendar_notification: dict[str, Any], state: State) -> d
         "target_recipients": calendar_notification.get("target_recipients") or None,
         "home_only": calendar_notification.get("home_only", False),
         "live_id": None,
+        "interactive_only": False,
         "source": f"calendar:{calendar_notification.get('name', calendar_notification.get('id'))}",
         "show_in_history": True,
         "dismiss_on_action": False,

@@ -149,7 +149,7 @@
         },
         "data_description": {
           "language": "Brukt for utgående varslingstekst, f.eks. Bekreft-knappen.",
-          "live_inactivity_timeout_minutes": "0 = deaktivert. Fjerner en direktevarsel-push for en mottaker når deres interaktiv-sensor har vært \"av\" så lenge.",
+          "live_inactivity_timeout_minutes": "0 = deaktivert. For varsler sendt med interactive_only: true, fjerner en direktevarsel-push for en mottaker når deres interaktiv-sensor har vært \"av\" så lenge.",
           "storage_path": "Tom = standard K93-Advanced-Notification-System-mappe. Absolutt, eller relativ til Home Assistants konfigurasjonsmappe; må være skrivbar for Home Assistant. database.db-filen inni den heter det uansett. Eksisterende historikk flyttes automatisk. Trer i kraft med én gang du lagrer."
         }
       }

@@ -298,6 +298,8 @@ async def async_clear_inactive_live_recipients(
     for record in store.async_list():
         if not record.get("live_id") or record.get("acknowledged"):
             continue
+        if not record.get("interactive_only"):
+            continue
 
         deliveries = record.get("recipients") or {}
         changed = False

@@ -31,6 +31,7 @@ def _notification_data(scheduled: dict[str, Any]) -> dict[str, Any]:
         "target_recipients": scheduled.get("target_recipients") or None,
         "home_only": scheduled.get("home_only", False),
         "live_id": None,
+        "interactive_only": False,
         "source": f"scheduled:{scheduled.get('name', scheduled.get('id'))}",
         "show_in_history": True,
         "dismiss_on_action": False,

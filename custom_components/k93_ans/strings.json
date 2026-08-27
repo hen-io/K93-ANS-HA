@@ -149,7 +149,7 @@
         },
         "data_description": {
           "language": "Used for outgoing notification text, e.g. the Acknowledge action button.",
-          "live_inactivity_timeout_minutes": "0 = disabled. Clears a live notification's push for a recipient once their interactive sensor has been \"off\" this long.",
+          "live_inactivity_timeout_minutes": "0 = disabled. For notifications sent with interactive_only: true, clears a live notification's push for a recipient once their interactive sensor has been \"off\" this long.",
           "storage_path": "Blank = default K93-Advanced-Notification-System folder. Absolute, or relative to the Home Assistant config directory; must be writable by Home Assistant. The database.db file inside it is named that regardless. Existing history is migrated automatically. Takes effect as soon as you save."
         }
       }

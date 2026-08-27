@@ -139,6 +139,20 @@ send_notification:
       example: "vacuum_kitchen"
       selector:
         text:
+    interactive_only:
+      name: Interactive only
+      description: >-
+        If true, this live notification's push is auto-cleared for any
+        recipient whose "interactive" entity (see Manage Recipients) has
+        been off longer than the Advanced "Live notification inactivity
+        timeout". Defaults to false (delivered and kept regardless of
+        recipient interactivity). Meaningless without both live_id and a
+        recipient's interactive entity being set, and without that Advanced
+        timeout being non-zero.
+      required: false
+      default: false
+      selector:
+        boolean:
     source:
       name: Source
       description: Free-text label for what triggered this notification.
