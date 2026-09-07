@@ -226,6 +226,14 @@ def async_restore_persistent_notifications(hass: HomeAssistant, store: Notificat
             _create_persistent_notification(hass, record)
 
 
+async def async_clear_live_notifications_on_startup(
+    hass: HomeAssistant, store: NotificationStore
+) -> None:
+    for record in store.async_list():
+        if record.get("live_id") and not record.get("acknowledged"):
+            await async_acknowledge(hass, store, record["id"], "restart")
+
+
 async def _send_clear_notification(hass: HomeAssistant, notify_service: str, record_id: str) -> None:
     for attempt in (1, 2):
         try:

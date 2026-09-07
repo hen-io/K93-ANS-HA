@@ -22,6 +22,7 @@ from .config_snapshot import async_write_config_snapshot
 from .dispatch import (
     async_acknowledge,
     async_clear_inactive_live_recipients,
+    async_clear_live_notifications_on_startup,
     async_handle_notification_event,
     async_register_persistent_notification_listener,
     async_restore_persistent_notifications,
@@ -43,6 +44,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     store = NotificationStore(hass, entry.options.get(CONF_STORAGE_PATH))
     await store.async_load()
     await async_write_config_snapshot(hass, store, entry.options)
+    await async_clear_live_notifications_on_startup(hass, store)
     async_restore_persistent_notifications(hass, store)
 
     async def _on_notification_event(event: Event) -> None:

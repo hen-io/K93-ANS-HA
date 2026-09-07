@@ -8,5 +8,5 @@
   "issue_tracker": "https://github.com/hen-io/k93-ans/issues",
   "after_dependencies": ["mobile_app"],
   "requirements": ["croniter>=1.4.0"],
-  "version": "0.5.9"
+  "version": "0.5.10"
 }
