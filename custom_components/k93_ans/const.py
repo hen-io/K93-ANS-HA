@@ -9,6 +9,7 @@ SIGNAL_UPDATED = "k93_ans_updated"
 SIGNAL_DELETED = "k93_ans_deleted"
 SIGNAL_CHAT_MESSAGE = "k93_ans_chat_message"
 SIGNAL_CHAT_READ = "k93_ans_chat_read"
+SIGNAL_CHAT_REACTION = "k93_ans_chat_reaction"
 CHAT_ALERT_LIVE_ID_PREFIX = "chat_"
 
 LEGACY_STORAGE_KEY = "k93_ans_notifications"

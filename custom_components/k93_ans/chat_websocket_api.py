@@ -6,10 +6,21 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 
-from .chat_dispatch import async_mark_chatroom_read, async_post_chat_message
+from .chat_dispatch import (
+    async_mark_chatroom_read,
+    async_post_chat_message,
+    async_toggle_reaction,
+    group_reactions,
+)
 from .chat_identity import resolve_sender
 from .chat_store import ChatStore
-from .const import CONF_CHATROOMS, DOMAIN, SIGNAL_CHAT_MESSAGE, SIGNAL_CHAT_READ
+from .const import (
+    CONF_CHATROOMS,
+    DOMAIN,
+    SIGNAL_CHAT_MESSAGE,
+    SIGNAL_CHAT_READ,
+    SIGNAL_CHAT_REACTION,
+)
 from .store import NotificationStore
 
 
@@ -33,7 +44,11 @@ def async_register_chat_websocket_api(
         return entry_data.get("user_names") or {}
 
     def _serialize_message(message: dict) -> dict:
-        return {**message, "sender": resolve_sender(hass, _user_names(), message)}
+        return {
+            **message,
+            "sender": resolve_sender(hass, _user_names(), message),
+            "reactions": group_reactions(chat_store.async_get_reactions(message["id"])),
+        }
 
     @websocket_api.websocket_command({vol.Required("type"): "k93_ans/chat/list_rooms"})
     @callback
@@ -108,13 +123,31 @@ def async_register_chat_websocket_api(
                 websocket_api.event_message(msg["id"], {"read": {"user_id": payload["user_id"]}})
             )
 
+        @callback
+        def forward_reaction(payload: dict) -> None:
+            if payload["chatroom_id"] != chatroom_id:
+                return
+            connection.send_message(
+                websocket_api.event_message(
+                    msg["id"],
+                    {
+                        "reaction": {
+                            "message_id": payload["message_id"],
+                            "reactions": payload["reactions"],
+                        }
+                    },
+                )
+            )
+
         unsub_message = async_dispatcher_connect(hass_, SIGNAL_CHAT_MESSAGE, forward_message)
         unsub_read = async_dispatcher_connect(hass_, SIGNAL_CHAT_READ, forward_read)
+        unsub_reaction = async_dispatcher_connect(hass_, SIGNAL_CHAT_REACTION, forward_reaction)
 
         @callback
         def unsub() -> None:
             unsub_message()
             unsub_read()
+            unsub_reaction()
 
         connection.subscriptions[msg["id"]] = unsub
         connection.send_result(msg["id"])
@@ -160,8 +193,33 @@ def async_register_chat_websocket_api(
         )
         connection.send_result(msg["id"])
 
+    @websocket_api.websocket_command(
+        {
+            vol.Required("type"): "k93_ans/chat/toggle_reaction",
+            vol.Required("chatroom_id"): str,
+            vol.Required("message_id"): str,
+            vol.Required("emoji"): vol.All(str, vol.Length(min=1, max=32)),
+        }
+    )
+    @websocket_api.async_response
+    async def handle_toggle_reaction(
+        hass_: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict
+    ) -> None:
+        chatroom = _find_chatroom(msg["chatroom_id"])
+        if chatroom is None or not _room_accessible(chatroom, connection.user.id):
+            connection.send_error(msg["id"], "access_denied", "No access to this chatroom")
+            return
+        if not chat_store.async_message_belongs_to_room(msg["chatroom_id"], msg["message_id"]):
+            connection.send_error(msg["id"], "not_found", "No such message in this chatroom")
+            return
+        reactions = await async_toggle_reaction(
+            hass_, chat_store, msg["chatroom_id"], msg["message_id"], connection.user.id, msg["emoji"]
+        )
+        connection.send_result(msg["id"], {"reactions": reactions})
+
     websocket_api.async_register_command(hass, handle_list_rooms)
     websocket_api.async_register_command(hass, handle_list_messages)
     websocket_api.async_register_command(hass, handle_subscribe)
     websocket_api.async_register_command(hass, handle_send)
     websocket_api.async_register_command(hass, handle_mark_read)
+    websocket_api.async_register_command(hass, handle_toggle_reaction)

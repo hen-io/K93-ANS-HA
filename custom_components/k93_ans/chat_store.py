@@ -24,6 +24,7 @@ class ChatStore:
         self._db_path = storage_dir / CUSTOM_STORAGE_FILENAME
         self._messages: dict[str, list[ChatMessage]] = {}
         self._reads: dict[tuple[str, str], dict[str, str | None]] = {}
+        self._reactions: dict[str, list[dict[str, str]]] = {}
 
 
     def _connect(self) -> sqlite3.Connection:
@@ -55,9 +56,27 @@ class ChatStore:
             )
             """
         )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS chat_reactions (
+                message_id TEXT NOT NULL,
+                user_id TEXT NOT NULL,
+                emoji TEXT NOT NULL,
+                created TEXT NOT NULL,
+                PRIMARY KEY (message_id, user_id, emoji)
+            )
+            """
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_k93_chat_reactions_message ON chat_reactions(message_id)"
+        )
         return conn
 
-    def _load_all(self) -> tuple[dict[str, list[ChatMessage]], dict[tuple[str, str], dict[str, str | None]]]:
+    def _load_all(self) -> tuple[
+        dict[str, list[ChatMessage]],
+        dict[tuple[str, str], dict[str, str | None]],
+        dict[str, list[dict[str, str]]],
+    ]:
         conn = self._connect()
         try:
             message_rows = conn.execute(
@@ -65,6 +84,9 @@ class ChatStore:
             ).fetchall()
             read_rows = conn.execute(
                 "SELECT chatroom_id, user_id, last_read_message_id, last_read_at FROM chat_reads"
+            ).fetchall()
+            reaction_rows = conn.execute(
+                "SELECT message_id, user_id, emoji FROM chat_reactions"
             ).fetchall()
         finally:
             conn.close()
@@ -80,7 +102,12 @@ class ChatStore:
                 "last_read_message_id": last_read_message_id,
                 "last_read_at": last_read_at,
             }
-        return messages_by_room, reads
+
+        reactions: dict[str, list[dict[str, str]]] = {}
+        for message_id, user_id, emoji in reaction_rows:
+            reactions.setdefault(message_id, []).append({"user_id": user_id, "emoji": emoji})
+
+        return messages_by_room, reads, reactions
 
     def _upsert_message(self, message: ChatMessage) -> None:
         conn = self._connect()
@@ -146,9 +173,56 @@ class ChatStore:
         finally:
             conn.close()
 
+    def _add_reaction(self, message_id: str, user_id: str, emoji: str, created: str) -> None:
+        conn = self._connect()
+        try:
+            conn.execute(
+                "INSERT OR IGNORE INTO chat_reactions (message_id, user_id, emoji, created) "
+                "VALUES (?, ?, ?, ?)",
+                (message_id, user_id, emoji, created),
+            )
+            conn.commit()
+        except sqlite3.Error:
+            _LOGGER.exception(
+                "K93 ANS failed writing chat reaction %s on message %s", emoji, message_id
+            )
+        finally:
+            conn.close()
+
+    def _remove_reaction(self, message_id: str, user_id: str, emoji: str) -> None:
+        conn = self._connect()
+        try:
+            conn.execute(
+                "DELETE FROM chat_reactions WHERE message_id = ? AND user_id = ? AND emoji = ?",
+                (message_id, user_id, emoji),
+            )
+            conn.commit()
+        except sqlite3.Error:
+            _LOGGER.exception(
+                "K93 ANS failed removing chat reaction %s on message %s", emoji, message_id
+            )
+        finally:
+            conn.close()
+
+    def _delete_reactions_for_messages(self, message_ids: list[str]) -> None:
+        if not message_ids:
+            return
+        conn = self._connect()
+        try:
+            conn.executemany(
+                "DELETE FROM chat_reactions WHERE message_id = ?", [(i,) for i in message_ids]
+            )
+            conn.commit()
+        except sqlite3.Error:
+            _LOGGER.exception("K93 ANS failed deleting chat reactions from the database")
+        finally:
+            conn.close()
+
 
     async def async_load(self) -> None:
-        self._messages, self._reads = await self._hass.async_add_executor_job(self._load_all)
+        self._messages, self._reads, self._reactions = await self._hass.async_add_executor_job(
+            self._load_all
+        )
 
     async def async_add_message(self, message: ChatMessage) -> None:
         self._messages.setdefault(message["chatroom_id"], []).insert(0, message)
@@ -169,6 +243,28 @@ class ChatStore:
     def async_latest_message(self, chatroom_id: str) -> ChatMessage | None:
         messages = self._messages.get(chatroom_id, [])
         return messages[0] if messages else None
+
+    def async_message_belongs_to_room(self, chatroom_id: str, message_id: str) -> bool:
+        return any(m["id"] == message_id for m in self._messages.get(chatroom_id, []))
+
+    def async_get_reactions(self, message_id: str) -> list[dict[str, str]]:
+        return list(self._reactions.get(message_id, []))
+
+    async def async_add_reaction(self, message_id: str, user_id: str, emoji: str) -> None:
+        existing = self._reactions.setdefault(message_id, [])
+        if not any(r["user_id"] == user_id and r["emoji"] == emoji for r in existing):
+            existing.append({"user_id": user_id, "emoji": emoji})
+        await self._hass.async_add_executor_job(
+            self._add_reaction, message_id, user_id, emoji, dt_util.utcnow().isoformat()
+        )
+
+    async def async_remove_reaction(self, message_id: str, user_id: str, emoji: str) -> None:
+        existing = self._reactions.get(message_id)
+        if existing:
+            self._reactions[message_id] = [
+                r for r in existing if not (r["user_id"] == user_id and r["emoji"] == emoji)
+            ]
+        await self._hass.async_add_executor_job(self._remove_reaction, message_id, user_id, emoji)
 
     def async_get_read_watermark(self, chatroom_id: str, user_id: str) -> dict[str, str | None] | None:
         return self._reads.get((chatroom_id, user_id))
@@ -222,3 +318,6 @@ class ChatStore:
 
         if removed_ids:
             await self._hass.async_add_executor_job(self._delete_message_ids, removed_ids)
+            for message_id in removed_ids:
+                self._reactions.pop(message_id, None)
+            await self._hass.async_add_executor_job(self._delete_reactions_for_messages, removed_ids)

@@ -15,6 +15,7 @@ from .const import (
     CONF_RECIPIENTS,
     SIGNAL_CHAT_MESSAGE,
     SIGNAL_CHAT_READ,
+    SIGNAL_CHAT_REACTION,
 )
 from .dispatch import async_acknowledge
 from .models import ChatMessage
@@ -134,3 +135,37 @@ async def async_mark_chatroom_read(
     record = store.async_get_by_live_id(f"{CHAT_ALERT_LIVE_ID_PREFIX}{chatroom_id}_{user_id}")
     if record is not None:
         await async_acknowledge(hass, store, record["id"], "chat_read")
+
+
+def group_reactions(raw: list[dict[str, str]]) -> list[dict[str, Any]]:
+    grouped: dict[str, list[str]] = {}
+    for row in raw:
+        grouped.setdefault(row["emoji"], []).append(row["user_id"])
+    return [
+        {"emoji": emoji, "count": len(user_ids), "user_ids": user_ids}
+        for emoji, user_ids in grouped.items()
+    ]
+
+
+async def async_toggle_reaction(
+    hass: HomeAssistant,
+    chat_store: ChatStore,
+    chatroom_id: str,
+    message_id: str,
+    user_id: str,
+    emoji: str,
+) -> list[dict[str, Any]]:
+    existing = chat_store.async_get_reactions(message_id)
+    already_reacted = any(r["user_id"] == user_id and r["emoji"] == emoji for r in existing)
+    if already_reacted:
+        await chat_store.async_remove_reaction(message_id, user_id, emoji)
+    else:
+        await chat_store.async_add_reaction(message_id, user_id, emoji)
+
+    reactions = group_reactions(chat_store.async_get_reactions(message_id))
+    async_dispatcher_send(
+        hass,
+        SIGNAL_CHAT_REACTION,
+        {"chatroom_id": chatroom_id, "message_id": message_id, "reactions": reactions},
+    )
+    return reactions
