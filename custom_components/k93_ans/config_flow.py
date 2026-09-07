@@ -17,6 +17,7 @@ from .const import (
     CONF_CHANNELS,
     CONF_CHAT_HISTORY_MAX_DAYS,
     CONF_CHAT_HISTORY_MAX_MESSAGES,
+    CONF_CHAT_REACTION_EMOJI,
     CONF_CHATROOMS,
     CONF_HISTORY_MAX_RECORDS,
     CONF_HISTORY_RETENTION_DAYS,
@@ -27,6 +28,7 @@ from .const import (
     CONF_STORAGE_PATH,
     DEFAULT_ALL_DAY_TIME,
     DEFAULT_CHANNEL,
+    DEFAULT_CHAT_REACTION_EMOJI,
     DOMAIN,
     IMPORTANCE_LEVELS,
     default_options,
@@ -702,6 +704,7 @@ class K93AnsOptionsFlow(config_entries.OptionsFlow):
                 if history_max_messages not in (None, "")
                 else None,
                 "new_message_alert": user_input["new_message_alert"],
+                "navigate_url": user_input.get("navigate_url") or None,
             }
             if existing:
                 options[CONF_CHATROOMS] = [
@@ -758,6 +761,11 @@ class K93AnsOptionsFlow(config_entries.OptionsFlow):
                 "new_message_alert",
                 default=existing["new_message_alert"] if existing else False,
             ): selector.BooleanSelector(),
+            vol.Optional(
+                "navigate_url",
+                default="",
+                description={"suggested_value": (existing.get("navigate_url") if existing else None) or ""},
+            ): selector.TextSelector(),
         }
         if existing:
             schema_dict[vol.Optional("remove", default=False)] = selector.BooleanSelector()
@@ -775,6 +783,7 @@ class K93AnsOptionsFlow(config_entries.OptionsFlow):
             options[CONF_HISTORY_MAX_RECORDS] = user_input[CONF_HISTORY_MAX_RECORDS]
             options[CONF_CHAT_HISTORY_MAX_DAYS] = user_input[CONF_CHAT_HISTORY_MAX_DAYS]
             options[CONF_CHAT_HISTORY_MAX_MESSAGES] = user_input[CONF_CHAT_HISTORY_MAX_MESSAGES]
+            options[CONF_CHAT_REACTION_EMOJI] = user_input.get(CONF_CHAT_REACTION_EMOJI, [])
             options[CONF_LANGUAGE] = user_input[CONF_LANGUAGE]
             options[CONF_LIVE_INACTIVITY_TIMEOUT_MINUTES] = user_input[
                 CONF_LIVE_INACTIVITY_TIMEOUT_MINUTES
@@ -808,6 +817,14 @@ class K93AnsOptionsFlow(config_entries.OptionsFlow):
                     default=options[CONF_CHAT_HISTORY_MAX_MESSAGES],
                 ): selector.NumberSelector(
                     selector.NumberSelectorConfig(min=1, mode="box")
+                ),
+                vol.Optional(
+                    CONF_CHAT_REACTION_EMOJI,
+                    default=options[CONF_CHAT_REACTION_EMOJI],
+                ): selector.SelectSelector(
+                    selector.SelectSelectorConfig(
+                        options=DEFAULT_CHAT_REACTION_EMOJI, multiple=True, custom_value=True
+                    )
                 ),
                 vol.Optional(
                     CONF_LANGUAGE,

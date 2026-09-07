@@ -296,9 +296,12 @@ class ChatStore:
         default_max_days: int,
         default_max_messages: int,
     ) -> None:
+        from .image_capture import async_delete_chat_images
+
         room_lookup = {c["id"]: c for c in chatroom_defs}
         now = dt_util.utcnow()
         removed_ids: list[str] = []
+        removed_by_room: dict[str, list[str]] = {}
 
         for chatroom_id, messages in self._messages.items():
             room = room_lookup.get(chatroom_id)
@@ -313,7 +316,9 @@ class ChatStore:
             kept = kept_by_age[:max_messages]
             if len(kept) != len(messages):
                 kept_ids = {m["id"] for m in kept}
-                removed_ids.extend(m["id"] for m in messages if m["id"] not in kept_ids)
+                room_removed = [m["id"] for m in messages if m["id"] not in kept_ids]
+                removed_ids.extend(room_removed)
+                removed_by_room[chatroom_id] = room_removed
                 self._messages[chatroom_id] = kept
 
         if removed_ids:
@@ -321,3 +326,5 @@ class ChatStore:
             for message_id in removed_ids:
                 self._reactions.pop(message_id, None)
             await self._hass.async_add_executor_job(self._delete_reactions_for_messages, removed_ids)
+            for chatroom_id, room_removed in removed_by_room.items():
+                await async_delete_chat_images(self._hass, chatroom_id, room_removed)

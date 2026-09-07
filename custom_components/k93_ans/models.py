@@ -81,6 +81,7 @@ class ChatRoom(TypedDict):
     history_max_messages: int | None
     history_max_days: int | None
     new_message_alert: bool
+    navigate_url: str | None
 
 
 class ChatMessage(TypedDict):
@@ -93,6 +94,7 @@ class ChatMessage(TypedDict):
     message: str
     created: str
     source: str | None
+    image: str | None
 
 
 class ScheduledNotification(TypedDict):

@@ -287,11 +287,14 @@ send_chat_message:
   description: >-
     Posts a message into a chatroom (see Manage chatrooms). Meant for
     automations/scripts, not real user-to-user chat - that's what the
-    k93-ans-chat-card's own composer is for. If the call has a real Home
-    Assistant user behind it (e.g. a script you ran yourself), the message
-    is attributed to that account exactly like one sent from the card and
-    sender_name/sender_icon are ignored; only a purely automated call with
-    no user behind it (e.g. a state-triggered automation) uses those.
+    k93-ans-chat-card's own composer is for. Setting sender_name and/or
+    sender_icon posts as that System/bot-style identity regardless of who
+    or what triggered the call - including a manual test from Developer
+    Tools. Leave both blank to instead attribute the message to whichever
+    real Home Assistant user triggered the call (e.g. a script you ran
+    yourself), the same as one sent from the card; falls back to a plain
+    "System" identity if the call has no real user behind it either (e.g.
+    a purely time/state-triggered automation).
   fields:
     chatroom_id:
       name: Chatroom

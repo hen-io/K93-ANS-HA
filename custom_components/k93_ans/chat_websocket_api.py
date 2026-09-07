@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import uuid
+
 import voluptuous as vol
 from homeassistant.components import websocket_api
 from homeassistant.config_entries import ConfigEntry
@@ -15,12 +17,15 @@ from .chat_dispatch import (
 from .chat_identity import resolve_sender
 from .chat_store import ChatStore
 from .const import (
+    CONF_CHAT_REACTION_EMOJI,
     CONF_CHATROOMS,
+    DEFAULT_CHAT_REACTION_EMOJI,
     DOMAIN,
     SIGNAL_CHAT_MESSAGE,
     SIGNAL_CHAT_READ,
     SIGNAL_CHAT_REACTION,
 )
+from .image_capture import async_save_chat_image
 from .store import NotificationStore
 
 
@@ -30,6 +35,9 @@ def async_register_chat_websocket_api(
 
     def _chatrooms() -> list[dict]:
         return entry.options.get(CONF_CHATROOMS, [])
+
+    def _reaction_emoji() -> list[str]:
+        return entry.options.get(CONF_CHAT_REACTION_EMOJI) or list(DEFAULT_CHAT_REACTION_EMOJI)
 
     def _find_chatroom(chatroom_id: str) -> dict | None:
         return next((c for c in _chatrooms() if c["id"] == chatroom_id), None)
@@ -61,7 +69,7 @@ def async_register_chat_websocket_api(
             for room in _chatrooms()
             if room.get("enabled", True) and _room_accessible(room, user_id)
         ]
-        connection.send_result(msg["id"], {"chatrooms": rooms})
+        connection.send_result(msg["id"], {"chatrooms": rooms, "reaction_emoji": _reaction_emoji()})
 
     @websocket_api.websocket_command(
         {
@@ -89,7 +97,11 @@ def async_register_chat_websocket_api(
         ]
         connection.send_result(
             msg["id"],
-            {"messages": [_serialize_message(m) for m in messages], "read_states": read_states},
+            {
+                "messages": [_serialize_message(m) for m in messages],
+                "read_states": read_states,
+                "reaction_emoji": _reaction_emoji(),
+            },
         )
 
     @websocket_api.websocket_command(
@@ -157,6 +169,10 @@ def async_register_chat_websocket_api(
             vol.Required("type"): "k93_ans/chat/send",
             vol.Required("chatroom_id"): str,
             vol.Required("message"): str,
+            vol.Optional("image_base64"): vol.All(str, vol.Length(max=8_000_000)),
+            vol.Optional("image_content_type"): vol.In(
+                ["image/jpeg", "image/png", "image/webp", "image/gif"]
+            ),
         }
     )
     @websocket_api.async_response
@@ -167,13 +183,29 @@ def async_register_chat_websocket_api(
         if chatroom is None or not _room_accessible(chatroom, connection.user.id):
             connection.send_error(msg["id"], "access_denied", "No access to this chatroom")
             return
+        message_id = str(uuid.uuid4())
+        image_url = None
+        if msg.get("image_base64"):
+            image_url = await async_save_chat_image(
+                hass_,
+                msg["chatroom_id"],
+                message_id,
+                msg["image_base64"],
+                msg.get("image_content_type") or "image/jpeg",
+            )
         message = await async_post_chat_message(
             hass_,
             entry,
             store,
             chat_store,
             chatroom,
-            {"message": msg["message"], "sender_user_id": connection.user.id, "source": "card"},
+            {
+                "id": message_id,
+                "message": msg["message"],
+                "sender_user_id": connection.user.id,
+                "source": "card",
+                "image": image_url,
+            },
         )
         connection.send_result(msg["id"], {"message": _serialize_message(message)})
 

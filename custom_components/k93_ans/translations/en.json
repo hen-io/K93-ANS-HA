@@ -158,6 +158,7 @@
           "history_max_days": "History retention override (days)",
           "history_max_messages": "History max messages override",
           "new_message_alert": "New message alert",
+          "navigate_url": "Notification tap action",
           "remove": "Remove this chatroom"
         },
         "data_description": {
@@ -165,7 +166,8 @@
           "allowed_user_ids": "Ignored when Access is \"All users\". Only these users can read this chatroom's history or send messages to it.",
           "history_max_days": "Blank = use the global \"Chat history\" settings under Advanced.",
           "history_max_messages": "Blank = use the global \"Chat history\" settings under Advanced.",
-          "new_message_alert": "If true, a new message pushes an alert to every other member's phone (via their Recipient's own \"Linked user\", see Manage recipients) that clears automatically once they read this chatroom. Never shown on the shared notification bell - only ever delivered to members who actually have access."
+          "new_message_alert": "If true, a new message pushes an alert to every other member's phone (via their Recipient's own \"Linked user\", see Manage recipients) that clears automatically once they read this chatroom. Never shown on the shared notification bell - only ever delivered to members who actually have access.",
+          "navigate_url": "Where tapping the new-message-alert notification itself (not an action button) takes you on mobile - a full URL or an app-relative path, e.g. /lovelace-home/chat. Blank = the companion app's own default (opens to its last view)."
         }
       },
       "advanced": {
@@ -175,6 +177,7 @@
           "history_max_records": "History max records",
           "chat_history_max_days": "Chat history retention (days)",
           "chat_history_max_messages": "Chat history max messages",
+          "chat_reaction_emoji": "Chat quick-reaction emoji",
           "language": "Language",
           "live_inactivity_timeout_minutes": "Live notification inactivity timeout (minutes)",
           "storage_path": "Notification history storage directory"
@@ -182,6 +185,7 @@
         "data_description": {
           "chat_history_max_days": "Default for a chatroom's own history retention, unless it sets its own override.",
           "chat_history_max_messages": "Default for a chatroom's own history max messages, unless it sets its own override.",
+          "chat_reaction_emoji": "The emoji offered when adding a reaction to a chat message. Type any emoji to add it to the list. Removing one here doesn't remove reactions already using it - it only affects what's offered when adding a new one.",
           "language": "Used for outgoing notification text, e.g. the Acknowledge action button.",
           "live_inactivity_timeout_minutes": "0 = disabled. For notifications sent with interactive_only: true, clears a live notification's push for a recipient once their interactive sensor has been \"off\" this long.",
           "storage_path": "Blank = default K93-Advanced-Notification-System folder. Absolute, or relative to the Home Assistant config directory; must be writable by Home Assistant. The database.db file inside it is named that regardless. Existing history is migrated automatically. Takes effect as soon as you save."

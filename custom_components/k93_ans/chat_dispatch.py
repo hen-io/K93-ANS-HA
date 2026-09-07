@@ -51,7 +51,7 @@ async def async_post_chat_message(
     data: dict[str, Any],
 ) -> ChatMessage:
     message: ChatMessage = {
-        "id": str(uuid.uuid4()),
+        "id": data.get("id") or str(uuid.uuid4()),
         "chatroom_id": chatroom["id"],
         "sender_user_id": data.get("sender_user_id"),
         "sender_name": data.get("sender_name"),
@@ -59,6 +59,7 @@ async def async_post_chat_message(
         "message": data["message"],
         "created": dt_util.utcnow().isoformat(),
         "source": data.get("source"),
+        "image": data.get("image"),
     }
     await chat_store.async_add_message(message)
 
@@ -112,6 +113,8 @@ async def _send_chat_alerts(
         }
         if chatroom.get("icon"):
             alert_fields["icon"] = chatroom["icon"]
+        if chatroom.get("navigate_url"):
+            alert_fields["data"] = {"clickAction": chatroom["navigate_url"]}
         alert_data = SEND_NOTIFICATION_SCHEMA(alert_fields)
         await async_send_notification(hass, entry, store, alert_data)
 

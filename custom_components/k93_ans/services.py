@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import uuid
 
 import voluptuous as vol
@@ -28,6 +29,8 @@ from .dispatch import async_acknowledge, async_delete_notifications
 from .image_capture import async_capture_entity_image
 from .models import NotificationRecord
 from .store import NotificationStore
+
+_LOGGER = logging.getLogger(__name__)
 
 SERVICE_SEND_NOTIFICATION = "send_notification"
 SERVICE_ACKNOWLEDGE = "acknowledge"
@@ -212,15 +215,27 @@ def async_register_services(
         if chatroom is None:
             raise ServiceValidationError(f"No chatroom '{query}'")
 
-        user_id = call.context.user_id
+        sender_name = call.data.get("sender_name")
+        sender_icon = call.data.get("sender_icon")
+        if sender_name or sender_icon:
+            user_id = None
+        else:
+            user_id = call.context.user_id
         message_data = {
             "message": call.data["message"],
             "sender_user_id": user_id,
-            "sender_name": None if user_id else (call.data.get("sender_name") or "System"),
-            "sender_icon": None if user_id else (call.data.get("sender_icon") or "mdi:robot"),
+            "sender_name": None if user_id else (sender_name or "System"),
+            "sender_icon": None if user_id else (sender_icon or "mdi:robot"),
             "source": "service",
         }
-        await async_post_chat_message(hass, entry, store, chat_store, chatroom, message_data)
+        message = await async_post_chat_message(hass, entry, store, chat_store, chatroom, message_data)
+        _LOGGER.warning(
+            "K93 ANS posted chat message %s to chatroom %s (sender_user_id=%s, sender_name=%s)",
+            message["id"],
+            chatroom["id"],
+            user_id,
+            sender_name,
+        )
 
     hass.services.async_register(
         DOMAIN,

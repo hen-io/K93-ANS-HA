@@ -158,6 +158,7 @@
           "history_max_days": "Overstyring av lagringstid for historikk (dager)",
           "history_max_messages": "Overstyring av maks antall meldinger",
           "new_message_alert": "Varsel om ny melding",
+          "navigate_url": "Handling ved trykk på varsel",
           "remove": "Fjern dette chatterommet"
         },
         "data_description": {
@@ -165,7 +166,8 @@
           "allowed_user_ids": "Ignoreres når Tilgang er \"Alle brukere\". Kun disse brukerne kan lese dette chatterommets historikk eller sende meldinger til det.",
           "history_max_days": "Tom = bruk de globale \"Chat-historikk\"-innstillingene under Avansert.",
           "history_max_messages": "Tom = bruk de globale \"Chat-historikk\"-innstillingene under Avansert.",
-          "new_message_alert": "Hvis sann, sender en ny melding en varsel-push til alle andre medlemmers telefon (via deres mottakers egen \"Tilknyttet bruker\", se Administrer mottakere) som fjernes automatisk når de leser dette chatterommet. Vises aldri på den delte varslingsklokken - leveres kun til medlemmer som faktisk har tilgang."
+          "new_message_alert": "Hvis sann, sender en ny melding en varsel-push til alle andre medlemmers telefon (via deres mottakers egen \"Tilknyttet bruker\", se Administrer mottakere) som fjernes automatisk når de leser dette chatterommet. Vises aldri på den delte varslingsklokken - leveres kun til medlemmer som faktisk har tilgang.",
+          "navigate_url": "Hvor et trykk på selve varselet (ikke en handlingsknapp) tar deg på mobil - en full URL eller en app-relativ sti, f.eks. /lovelace-home/chat. Tom = følgeappens egen standard (åpner til siste visning)."
         }
       },
       "advanced": {
@@ -175,6 +177,7 @@
           "history_max_records": "Maks antall i historikk",
           "chat_history_max_days": "Lagringstid for chat-historikk (dager)",
           "chat_history_max_messages": "Maks antall meldinger i chat-historikk",
+          "chat_reaction_emoji": "Hurtigreaksjons-emoji for chat",
           "language": "Språk",
           "live_inactivity_timeout_minutes": "Inaktivitetstidsavbrudd for direktevarsler (minutter)",
           "storage_path": "Lagringsmappe for varslingshistorikk"
@@ -182,6 +185,7 @@
         "data_description": {
           "chat_history_max_days": "Standard for et chatteroms egen lagringstid, med mindre det setter sin egen overstyring.",
           "chat_history_max_messages": "Standard for et chatteroms eget maks antall meldinger, med mindre det setter sin egen overstyring.",
+          "chat_reaction_emoji": "Emojiene som tilbys når man legger til en reaksjon på en chat-melding. Skriv inn en hvilken som helst emoji for å legge den til i listen. Å fjerne en her fjerner ikke reaksjoner som allerede bruker den - det påvirker kun hva som tilbys når man legger til en ny.",
           "language": "Brukt for utgående varslingstekst, f.eks. Bekreft-knappen.",
           "live_inactivity_timeout_minutes": "0 = deaktivert. For varsler sendt med interactive_only: true, fjerner en direktevarsel-push for en mottaker når deres interaktiv-sensor har vært \"av\" så lenge.",
           "storage_path": "Tom = standard K93-Advanced-Notification-System-mappe. Absolutt, eller relativ til Home Assistants konfigurasjonsmappe; må være skrivbar for Home Assistant. database.db-filen inni den heter det uansett. Eksisterende historikk flyttes automatisk. Trer i kraft med én gang du lagrer."
