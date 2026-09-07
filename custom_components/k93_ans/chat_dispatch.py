@@ -12,7 +12,9 @@ from homeassistant.util import dt as dt_util
 from .chat_store import ChatStore
 from .const import (
     CHAT_ALERT_LIVE_ID_PREFIX,
+    CONF_CHANNELS,
     CONF_RECIPIENTS,
+    IMPORTANCE_LEVELS,
     SIGNAL_CHAT_MESSAGE,
     SIGNAL_CHAT_READ,
     SIGNAL_CHAT_REACTION,
@@ -25,6 +27,14 @@ from .store import NotificationStore
 _LOGGER = logging.getLogger(__name__)
 
 _MESSAGE_PREVIEW_MAX_LEN = 120
+_CHAT_ALERT_IMPORTANCE = "normal"
+
+
+def _importance_rank(level: str) -> int:
+    try:
+        return IMPORTANCE_LEVELS.index(level)
+    except ValueError:
+        return IMPORTANCE_LEVELS.index("normal")
 
 
 async def _resolve_room_members(hass: HomeAssistant, chatroom: dict[str, Any]) -> list[str]:
@@ -40,6 +50,45 @@ def _linked_recipient_ids(entry: ConfigEntry, user_id: str) -> list[str]:
         for r in entry.options.get(CONF_RECIPIENTS, [])
         if r.get("linked_user_id") == user_id and r.get("enabled", True)
     ]
+
+
+def _diagnose_recipient_delivery(entry: ConfigEntry, recipient: dict[str, Any]) -> None:
+    allowed_channels = recipient.get("allowed_channels") or []
+    if allowed_channels and "chat" not in allowed_channels:
+        _LOGGER.warning(
+            "K93 ANS chat alert: recipient '%s' is linked for chat alerts, but its own Allowed "
+            "channels doesn't include 'chat' (currently: %s) - the alert will be silently "
+            "filtered out. Add 'chat' to that recipient's Allowed channels, or clear the list "
+            "entirely to allow every channel.",
+            recipient.get("name", recipient.get("id")),
+            allowed_channels,
+        )
+        return
+
+    channel_defs = {c["key"]: c for c in entry.options.get(CONF_CHANNELS, [])}
+    chat_channel = channel_defs.get("chat")
+    if chat_channel is not None and not chat_channel.get("enabled", True):
+        _LOGGER.warning(
+            "K93 ANS chat alert: the 'chat' channel itself is disabled (Manage channels) - no "
+            "chat alert can be delivered to any recipient until it's re-enabled."
+        )
+        return
+
+    per_channel_importance = (recipient.get("channel_importance") or {}).get("chat")
+    effective_min = per_channel_importance or recipient.get("min_importance", "low")
+    channel_min = chat_channel.get("min_importance", "low") if chat_channel else "low"
+    required_rank = max(_importance_rank(effective_min), _importance_rank(channel_min))
+    if _importance_rank(_CHAT_ALERT_IMPORTANCE) < required_rank:
+        _LOGGER.warning(
+            "K93 ANS chat alert: recipient '%s' requires at least '%s' importance to receive "
+            "'chat' notifications, but chat alerts are always sent at '%s' - the alert will be "
+            "silently filtered out. Lower that recipient's minimum importance, or add a 'chat' "
+            "per-channel importance override for it, to '%s' or below.",
+            recipient.get("name", recipient.get("id")),
+            IMPORTANCE_LEVELS[required_rank],
+            _CHAT_ALERT_IMPORTANCE,
+            _CHAT_ALERT_IMPORTANCE,
+        )
 
 
 async def async_post_chat_message(
@@ -115,6 +164,19 @@ async def _send_chat_alerts(
             alert_fields["icon"] = chatroom["icon"]
         if chatroom.get("navigate_url"):
             alert_fields["data"] = {"clickAction": chatroom["navigate_url"]}
+
+        _LOGGER.warning(
+            "K93 ANS chat alert: chatroom=%s member=%s -> recipients=%s",
+            chatroom["id"],
+            member_user_id,
+            recipient_ids,
+        )
+        recipient_defs = {r["id"]: r for r in entry.options.get(CONF_RECIPIENTS, [])}
+        for recipient_id in recipient_ids:
+            recipient = recipient_defs.get(recipient_id)
+            if recipient is not None:
+                _diagnose_recipient_delivery(entry, recipient)
+
         alert_data = SEND_NOTIFICATION_SCHEMA(alert_fields)
         await async_send_notification(hass, entry, store, alert_data)
 
