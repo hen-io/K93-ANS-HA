@@ -19,6 +19,7 @@ from homeassistant.util import dt as dt_util
 
 from .const import (
     ANDROID_IMPORTANCE_MAP,
+    CHAT_ALERT_LIVE_ID_PREFIX,
     CONF_CHANNELS,
     CONF_LIVE_INACTIVITY_TIMEOUT_MINUTES,
     CONF_RECIPIENTS,
@@ -230,8 +231,12 @@ async def async_clear_live_notifications_on_startup(
     hass: HomeAssistant, store: NotificationStore
 ) -> None:
     for record in store.async_list():
-        if record.get("live_id") and not record.get("acknowledged"):
-            await async_acknowledge(hass, store, record["id"], "restart")
+        live_id = record.get("live_id")
+        if not live_id or record.get("acknowledged"):
+            continue
+        if live_id.startswith(CHAT_ALERT_LIVE_ID_PREFIX):
+            continue
+        await async_acknowledge(hass, store, record["id"], "restart")
 
 
 async def _send_clear_notification(hass: HomeAssistant, notify_service: str, record_id: str) -> None:

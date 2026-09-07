@@ -281,3 +281,46 @@ restore_config_from_snapshot:
       default: false
       selector:
         boolean:
+
+send_chat_message:
+  name: Send chat message
+  description: >-
+    Posts a message into a chatroom (see Manage chatrooms). Meant for
+    automations/scripts, not real user-to-user chat - that's what the
+    k93-ans-chat-card's own composer is for. If the call has a real Home
+    Assistant user behind it (e.g. a script you ran yourself), the message
+    is attributed to that account exactly like one sent from the card and
+    sender_name/sender_icon are ignored; only a purely automated call with
+    no user behind it (e.g. a state-triggered automation) uses those.
+  fields:
+    chatroom_id:
+      name: Chatroom
+      description: >-
+        The chatroom to post to, given by its id or its configured name
+        (as shown in Manage chatrooms), case-insensitively.
+      required: true
+      selector:
+        text:
+    message:
+      name: Message
+      description: The message text.
+      required: true
+      selector:
+        text:
+          multiline: true
+    sender_name:
+      name: Sender name
+      description: >-
+        Only used when this call has no real Home Assistant user behind it
+        (see above). Defaults to "System" if left blank.
+      required: false
+      selector:
+        text:
+    sender_icon:
+      name: Sender icon
+      description: >-
+        Only used when this call has no real Home Assistant user behind it
+        (see above). An mdi: icon. Defaults to mdi:robot if left blank.
+      required: false
+      selector:
+        text:

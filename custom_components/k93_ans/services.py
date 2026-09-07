@@ -9,10 +9,12 @@ from homeassistant.exceptions import ServiceValidationError
 from homeassistant.helpers import config_validation as cv
 from homeassistant.util import dt as dt_util
 
+from .chat_store import ChatStore
 from .config_snapshot import async_restore_config_from_snapshot
 from .const import (
     ACK_ACTION_LABELS,
     ACK_ACTION_PREFIX,
+    CONF_CHATROOMS,
     CONF_LANGUAGE,
     DEFAULT_CHANNEL,
     DEFAULT_IMPORTANCE,
@@ -33,6 +35,7 @@ SERVICE_END_LIVE_NOTIFICATION = "end_live_notification"
 SERVICE_DELETE_NOTIFICATION = "delete_notification"
 SERVICE_CLEAR_HISTORY = "clear_history"
 SERVICE_RESTORE_CONFIG_FROM_SNAPSHOT = "restore_config_from_snapshot"
+SERVICE_SEND_CHAT_MESSAGE = "send_chat_message"
 
 ACKNOWLEDGE_SCHEMA = vol.Schema({vol.Required("notification_id"): cv.string})
 END_LIVE_NOTIFICATION_SCHEMA = vol.Schema({vol.Required("live_id"): cv.string})
@@ -41,6 +44,15 @@ CLEAR_HISTORY_SCHEMA = vol.Schema(
     {vol.Optional("include_unacknowledged", default=False): cv.boolean}
 )
 RESTORE_CONFIG_FROM_SNAPSHOT_SCHEMA = vol.Schema({vol.Required("confirm"): cv.boolean})
+
+SEND_CHAT_MESSAGE_SCHEMA = vol.Schema(
+    {
+        vol.Required("chatroom_id"): cv.string,
+        vol.Required("message"): cv.string,
+        vol.Optional("sender_name"): cv.string,
+        vol.Optional("sender_icon"): cv.string,
+    }
+)
 
 ACTION_SCHEMA = vol.Schema(
     {
@@ -153,7 +165,9 @@ async def async_send_notification(
     hass.bus.async_fire(EVENT_NOTIFICATION, record)
 
 
-def async_register_services(hass: HomeAssistant, entry: ConfigEntry, store: NotificationStore) -> None:
+def async_register_services(
+    hass: HomeAssistant, entry: ConfigEntry, store: NotificationStore, chat_store: ChatStore
+) -> None:
 
     async def handle_send_notification(call: ServiceCall) -> None:
         await async_send_notification(hass, entry, store, dict(call.data))
@@ -181,6 +195,32 @@ def async_register_services(hass: HomeAssistant, entry: ConfigEntry, store: Noti
                 "current configuration."
             )
         await async_restore_config_from_snapshot(hass, entry, store)
+
+    async def handle_send_chat_message(call: ServiceCall) -> None:
+        from .chat_dispatch import async_post_chat_message
+
+        chatrooms = entry.options.get(CONF_CHATROOMS, [])
+        query = call.data["chatroom_id"]
+        chatroom = next(
+            (
+                c
+                for c in chatrooms
+                if c["id"] == query or c["name"].strip().lower() == query.strip().lower()
+            ),
+            None,
+        )
+        if chatroom is None:
+            raise ServiceValidationError(f"No chatroom '{query}'")
+
+        user_id = call.context.user_id
+        message_data = {
+            "message": call.data["message"],
+            "sender_user_id": user_id,
+            "sender_name": None if user_id else (call.data.get("sender_name") or "System"),
+            "sender_icon": None if user_id else (call.data.get("sender_icon") or "mdi:robot"),
+            "source": "service",
+        }
+        await async_post_chat_message(hass, entry, store, chat_store, chatroom, message_data)
 
     hass.services.async_register(
         DOMAIN,
@@ -218,6 +258,12 @@ def async_register_services(hass: HomeAssistant, entry: ConfigEntry, store: Noti
         handle_restore_config_from_snapshot,
         schema=RESTORE_CONFIG_FROM_SNAPSHOT_SCHEMA,
     )
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_SEND_CHAT_MESSAGE,
+        handle_send_chat_message,
+        schema=SEND_CHAT_MESSAGE_SCHEMA,
+    )
 
 
 def async_unregister_services(hass: HomeAssistant) -> None:
@@ -227,3 +273,4 @@ def async_unregister_services(hass: HomeAssistant) -> None:
     hass.services.async_remove(DOMAIN, SERVICE_DELETE_NOTIFICATION)
     hass.services.async_remove(DOMAIN, SERVICE_RESTORE_CONFIG_FROM_SNAPSHOT)
     hass.services.async_remove(DOMAIN, SERVICE_CLEAR_HISTORY)
+    hass.services.async_remove(DOMAIN, SERVICE_SEND_CHAT_MESSAGE)

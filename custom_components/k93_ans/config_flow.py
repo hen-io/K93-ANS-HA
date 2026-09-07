@@ -15,6 +15,9 @@ from .config_snapshot import async_write_config_snapshot
 from .const import (
     CONF_CALENDAR_NOTIFICATIONS,
     CONF_CHANNELS,
+    CONF_CHAT_HISTORY_MAX_DAYS,
+    CONF_CHAT_HISTORY_MAX_MESSAGES,
+    CONF_CHATROOMS,
     CONF_HISTORY_MAX_RECORDS,
     CONF_HISTORY_RETENTION_DAYS,
     CONF_LANGUAGE,
@@ -65,6 +68,10 @@ class K93AnsOptionsFlow(config_entries.OptionsFlow):
             self._options = {**default_options(), **dict(self.config_entry.options)}
         return self._options
 
+    async def _user_choices(self) -> list[dict[str, str]]:
+        users = await self.hass.auth.async_get_users()
+        return [{"value": user.id, "label": user.name} for user in users if not user.system_generated]
+
     async def _async_save(self) -> None:
         options = self._ensure_options()
         self.hass.config_entries.async_update_entry(self.config_entry, options=options)
@@ -82,6 +89,7 @@ class K93AnsOptionsFlow(config_entries.OptionsFlow):
                 "manage_channels",
                 "manage_scheduled",
                 "manage_calendar",
+                "manage_chatrooms",
                 "advanced",
                 "finish",
             ],
@@ -145,6 +153,7 @@ class K93AnsOptionsFlow(config_entries.OptionsFlow):
                 "notify_service": user_input["notify_service"],
                 "person_entity_id": user_input.get("person_entity_id") or None,
                 "interactive_entity_id": user_input.get("interactive_entity_id") or None,
+                "linked_user_id": user_input.get("linked_user_id") or None,
                 "min_importance": user_input["min_importance"],
                 "allowed_channels": new_allowed_channels,
                 "channel_importance": channel_importance,
@@ -168,6 +177,7 @@ class K93AnsOptionsFlow(config_entries.OptionsFlow):
 
         notify_services = sorted(self.hass.services.async_services().get("notify", {}).keys())
         channel_choices = [c["key"] for c in options[CONF_CHANNELS]]
+        user_choices = await self._user_choices()
 
         notify_service_key = (
             vol.Required("notify_service", default=existing["notify_service"])
@@ -190,6 +200,14 @@ class K93AnsOptionsFlow(config_entries.OptionsFlow):
                 "interactive_entity_id",
                 default=(existing.get("interactive_entity_id") if existing else None),
             ): selector.EntitySelector(selector.EntitySelectorConfig(domain="binary_sensor")),
+            vol.Optional(
+                "linked_user_id",
+                default=(existing.get("linked_user_id") or "") if existing else "",
+            ): selector.SelectSelector(
+                selector.SelectSelectorConfig(
+                    options=[{"value": "", "label": "(not linked)"}] + user_choices, mode="dropdown"
+                )
+            ),
             vol.Optional(
                 "min_importance",
                 default=existing["min_importance"] if existing else "normal",
@@ -627,6 +645,126 @@ class K93AnsOptionsFlow(config_entries.OptionsFlow):
         )
 
 
+    async def async_step_manage_chatrooms(
+        self, user_input: dict | None = None
+    ) -> config_entries.ConfigFlowResult:
+        options = self._ensure_options()
+        chatrooms = options[CONF_CHATROOMS]
+
+        if user_input is not None:
+            self._editing_id = None if user_input["chatroom"] == ADD_NEW else user_input["chatroom"]
+            return await self.async_step_edit_chatroom()
+
+        if not chatrooms:
+            self._editing_id = None
+            return await self.async_step_edit_chatroom()
+
+        choices = [{"value": c["id"], "label": c["name"]} for c in chatrooms]
+        choices.append({"value": ADD_NEW, "label": "Add new chatroom"})
+
+        return self.async_show_form(
+            step_id="manage_chatrooms",
+            data_schema=vol.Schema(
+                {
+                    vol.Required("chatroom"): selector.SelectSelector(
+                        selector.SelectSelectorConfig(options=choices, mode="dropdown")
+                    )
+                }
+            ),
+        )
+
+    async def async_step_edit_chatroom(
+        self, user_input: dict | None = None
+    ) -> config_entries.ConfigFlowResult:
+        options = self._ensure_options()
+        chatrooms = options[CONF_CHATROOMS]
+        existing = next((c for c in chatrooms if c["id"] == self._editing_id), None)
+
+        if user_input is not None:
+            if user_input.get("remove") and existing is not None:
+                options[CONF_CHATROOMS] = [c for c in chatrooms if c["id"] != existing["id"]]
+                await self._async_save()
+                return await self.async_step_init()
+
+            history_max_days = user_input.get("history_max_days")
+            history_max_messages = user_input.get("history_max_messages")
+            chatroom = {
+                "id": existing["id"] if existing else str(uuid.uuid4()),
+                "name": user_input["name"],
+                "icon": user_input.get("icon") or None,
+                "enabled": user_input["enabled"],
+                "access_mode": user_input["access_mode"],
+                "allowed_user_ids": user_input.get("allowed_user_ids", []),
+                "history_max_days": int(history_max_days)
+                if history_max_days not in (None, "")
+                else None,
+                "history_max_messages": int(history_max_messages)
+                if history_max_messages not in (None, "")
+                else None,
+                "new_message_alert": user_input["new_message_alert"],
+            }
+            if existing:
+                options[CONF_CHATROOMS] = [
+                    chatroom if c["id"] == existing["id"] else c for c in chatrooms
+                ]
+            else:
+                options[CONF_CHATROOMS] = [*chatrooms, chatroom]
+
+            await self._async_save()
+            return await self.async_step_init()
+
+        user_choices = await self._user_choices()
+
+        schema_dict: dict[Any, Any] = {
+            vol.Required("name", default=existing["name"] if existing else ""): selector.TextSelector(),
+            vol.Optional(
+                "icon",
+                default="",
+                description={"suggested_value": (existing.get("icon") if existing else None) or ""},
+            ): selector.TextSelector(),
+            vol.Optional(
+                "enabled", default=existing["enabled"] if existing else True
+            ): selector.BooleanSelector(),
+            vol.Optional(
+                "access_mode",
+                default=existing.get("access_mode", "all") if existing else "all",
+            ): selector.SelectSelector(
+                selector.SelectSelectorConfig(
+                    options=[
+                        {"value": "all", "label": "All users"},
+                        {"value": "selected", "label": "Selected users"},
+                    ]
+                )
+            ),
+            vol.Optional(
+                "allowed_user_ids",
+                default=existing.get("allowed_user_ids", []) if existing else [],
+            ): selector.SelectSelector(
+                selector.SelectSelectorConfig(options=user_choices, multiple=True)
+            ),
+            vol.Optional(
+                "history_max_days",
+                description={
+                    "suggested_value": existing.get("history_max_days") if existing else None
+                },
+            ): selector.NumberSelector(selector.NumberSelectorConfig(min=1, mode="box")),
+            vol.Optional(
+                "history_max_messages",
+                description={
+                    "suggested_value": existing.get("history_max_messages") if existing else None
+                },
+            ): selector.NumberSelector(selector.NumberSelectorConfig(min=1, mode="box")),
+            vol.Optional(
+                "new_message_alert",
+                default=existing["new_message_alert"] if existing else False,
+            ): selector.BooleanSelector(),
+        }
+        if existing:
+            schema_dict[vol.Optional("remove", default=False)] = selector.BooleanSelector()
+
+        return self.async_show_form(step_id="edit_chatroom", data_schema=vol.Schema(schema_dict))
+
+
     async def async_step_advanced(
         self, user_input: dict | None = None
     ) -> config_entries.ConfigFlowResult:
@@ -635,6 +773,8 @@ class K93AnsOptionsFlow(config_entries.OptionsFlow):
         if user_input is not None:
             options[CONF_HISTORY_RETENTION_DAYS] = user_input[CONF_HISTORY_RETENTION_DAYS]
             options[CONF_HISTORY_MAX_RECORDS] = user_input[CONF_HISTORY_MAX_RECORDS]
+            options[CONF_CHAT_HISTORY_MAX_DAYS] = user_input[CONF_CHAT_HISTORY_MAX_DAYS]
+            options[CONF_CHAT_HISTORY_MAX_MESSAGES] = user_input[CONF_CHAT_HISTORY_MAX_MESSAGES]
             options[CONF_LANGUAGE] = user_input[CONF_LANGUAGE]
             options[CONF_LIVE_INACTIVITY_TIMEOUT_MINUTES] = user_input[
                 CONF_LIVE_INACTIVITY_TIMEOUT_MINUTES
@@ -654,6 +794,18 @@ class K93AnsOptionsFlow(config_entries.OptionsFlow):
                 vol.Optional(
                     CONF_HISTORY_MAX_RECORDS,
                     default=options[CONF_HISTORY_MAX_RECORDS],
+                ): selector.NumberSelector(
+                    selector.NumberSelectorConfig(min=1, mode="box")
+                ),
+                vol.Optional(
+                    CONF_CHAT_HISTORY_MAX_DAYS,
+                    default=options[CONF_CHAT_HISTORY_MAX_DAYS],
+                ): selector.NumberSelector(
+                    selector.NumberSelectorConfig(min=1, mode="box")
+                ),
+                vol.Optional(
+                    CONF_CHAT_HISTORY_MAX_MESSAGES,
+                    default=options[CONF_CHAT_HISTORY_MAX_MESSAGES],
                 ): selector.NumberSelector(
                     selector.NumberSelectorConfig(min=1, mode="box")
                 ),

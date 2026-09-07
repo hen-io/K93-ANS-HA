@@ -55,6 +55,7 @@ class Recipient(TypedDict):
     enabled: bool
     person_entity_id: str | None
     interactive_entity_id: str | None
+    linked_user_id: str | None
 
 
 class Channel(TypedDict):
@@ -67,6 +68,31 @@ class Channel(TypedDict):
     color: str | None
     retention_days: int | None
     max_records: int | None
+
+
+class ChatRoom(TypedDict):
+
+    id: str
+    name: str
+    icon: str | None
+    enabled: bool
+    access_mode: str
+    allowed_user_ids: list[str]
+    history_max_messages: int | None
+    history_max_days: int | None
+    new_message_alert: bool
+
+
+class ChatMessage(TypedDict):
+
+    id: str
+    chatroom_id: str
+    sender_user_id: str | None
+    sender_name: str | None
+    sender_icon: str | None
+    message: str
+    created: str
+    source: str | None
 
 
 class ScheduledNotification(TypedDict):

@@ -19,6 +19,7 @@
           "manage_channels": "Manage channels",
           "manage_scheduled": "Manage scheduled notifications",
           "manage_calendar": "Manage calendar notifications",
+          "manage_chatrooms": "Manage chatrooms",
           "advanced": "Advanced",
           "finish": "Done"
         }
@@ -37,6 +38,7 @@
           "notify_service": "Notify service",
           "person_entity_id": "Person",
           "interactive_entity_id": "Interactive sensor",
+          "linked_user_id": "Linked user",
           "min_importance": "Minimum importance",
           "allowed_channels": "Allowed channels",
           "enabled": "Enabled",
@@ -45,6 +47,7 @@
         "data_description": {
           "person_entity_id": "Optional - only meaningful when a notification sets \"home only\"; required for that filter to affect this recipient at all.",
           "interactive_entity_id": "Optional - a binary_sensor that's \"on\" while this recipient's phone is in use. Required for the live notification inactivity timeout under Advanced.",
+          "linked_user_id": "Optional - the Home Assistant login this recipient's phone belongs to. Required for this recipient to receive a chatroom's new-message-alert push (see Manage chatrooms); has no effect otherwise.",
           "min_importance": "Default minimum importance for this recipient - overridable per channel, in the fields that appear below after saving a channel selection.",
           "allowed_channels": "Empty = all channels."
         }
@@ -138,16 +141,47 @@
           "target_recipients": "Restrict delivery to these recipients (by name), same as send_notification's own \"target_recipients\" field. Empty = consider all enabled recipients."
         }
       },
+      "manage_chatrooms": {
+        "title": "Manage chatrooms",
+        "data": {
+          "chatroom": "Chatroom"
+        }
+      },
+      "edit_chatroom": {
+        "title": "Chatroom",
+        "data": {
+          "name": "Name",
+          "icon": "Icon",
+          "enabled": "Enabled",
+          "access_mode": "Access",
+          "allowed_user_ids": "Allowed users",
+          "history_max_days": "History retention override (days)",
+          "history_max_messages": "History max messages override",
+          "new_message_alert": "New message alert",
+          "remove": "Remove this chatroom"
+        },
+        "data_description": {
+          "icon": "An mdi: icon, e.g. mdi:forum. Blank = default.",
+          "allowed_user_ids": "Ignored when Access is \"All users\". Only these users can read this chatroom's history or send messages to it.",
+          "history_max_days": "Blank = use the global \"Chat history\" settings under Advanced.",
+          "history_max_messages": "Blank = use the global \"Chat history\" settings under Advanced.",
+          "new_message_alert": "If true, a new message pushes an alert to every other member's phone (via their Recipient's own \"Linked user\", see Manage recipients) that clears automatically once they read this chatroom. Never shown on the shared notification bell - only ever delivered to members who actually have access."
+        }
+      },
       "advanced": {
         "title": "Advanced",
         "data": {
           "history_retention_days": "History retention (days)",
           "history_max_records": "History max records",
+          "chat_history_max_days": "Chat history retention (days)",
+          "chat_history_max_messages": "Chat history max messages",
           "language": "Language",
           "live_inactivity_timeout_minutes": "Live notification inactivity timeout (minutes)",
           "storage_path": "Notification history storage directory"
         },
         "data_description": {
+          "chat_history_max_days": "Default for a chatroom's own history retention, unless it sets its own override.",
+          "chat_history_max_messages": "Default for a chatroom's own history max messages, unless it sets its own override.",
           "language": "Used for outgoing notification text, e.g. the Acknowledge action button.",
           "live_inactivity_timeout_minutes": "0 = disabled. For notifications sent with interactive_only: true, clears a live notification's push for a recipient once their interactive sensor has been \"off\" this long.",
           "storage_path": "Blank = default K93-Advanced-Notification-System folder. Absolute, or relative to the Home Assistant config directory; must be writable by Home Assistant. The database.db file inside it is named that regardless. Existing history is migrated automatically. Takes effect as soon as you save."

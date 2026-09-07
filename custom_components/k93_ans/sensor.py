@@ -12,7 +12,14 @@ from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.util import dt as dt_util
 
-from .const import CONF_CHANNELS, CONF_RECIPIENTS, DOMAIN, SIGNAL_DELETED, SIGNAL_UPDATED
+from .const import (
+    CONF_CHANNELS,
+    CONF_CHATROOMS,
+    CONF_RECIPIENTS,
+    DOMAIN,
+    SIGNAL_DELETED,
+    SIGNAL_UPDATED,
+)
 from .models import NotificationRecord
 from .store import NotificationStore
 
@@ -25,6 +32,7 @@ async def async_setup_entry(
         [
             K93AnsChannelsSensor(entry, store),
             K93AnsRecipientsSensor(entry, store),
+            K93AnsChatroomsSensor(entry, store),
             K93AnsStoredSensor(entry, store),
             K93AnsSentTodaySensor(entry, store),
             K93AnsSentThisWeekSensor(entry, store),
@@ -57,7 +65,7 @@ class K93AnsSensorBase(SensorEntity):
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, entry.entry_id)},
             name="K93 ANS",
-            manufacturer="K93",
+            manufacturer="@hen-io | Henrik Isefjær Olsen",
             model="Advanced Notification System",
             entry_type=DeviceEntryType.SERVICE,
         )
@@ -128,6 +136,33 @@ class K93AnsRecipientsSensor(K93AnsSensorBase):
                     "enabled": recipient.get("enabled", True),
                 }
                 for recipient in self._entry.options.get(CONF_RECIPIENTS, [])
+            ]
+        }
+
+
+class K93AnsChatroomsSensor(K93AnsSensorBase):
+
+    _attr_icon = "mdi:forum"
+    _attr_state_class = SensorStateClass.MEASUREMENT
+
+    def __init__(self, entry: ConfigEntry, store: NotificationStore) -> None:
+        super().__init__(entry, store, "chatrooms", "Configured chatrooms")
+
+    @property
+    def native_value(self) -> int:
+        return len(self._entry.options.get(CONF_CHATROOMS, []))
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        return {
+            "chatrooms": [
+                {
+                    "id": room["id"],
+                    "name": room["name"],
+                    "icon": room.get("icon"),
+                    "enabled": room.get("enabled", True),
+                }
+                for room in self._entry.options.get(CONF_CHATROOMS, [])
             ]
         }
 

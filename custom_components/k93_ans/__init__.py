@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import uuid
 from datetime import timedelta
 
 from homeassistant.config_entries import ConfigEntry
@@ -8,16 +9,24 @@ from homeassistant.helpers.event import async_track_time_interval
 
 from .const import (
     ACK_ACTION_PREFIX,
+    BUILTIN_CHANNELS,
     CONF_CHANNELS,
+    CONF_CHAT_HISTORY_MAX_DAYS,
+    CONF_CHAT_HISTORY_MAX_MESSAGES,
+    CONF_CHATROOMS,
     CONF_HISTORY_MAX_RECORDS,
     CONF_HISTORY_RETENTION_DAYS,
     CONF_STORAGE_PATH,
+    DEFAULT_CHAT_HISTORY_MAX_DAYS,
+    DEFAULT_CHAT_HISTORY_MAX_MESSAGES,
     DEFAULT_HISTORY_MAX_RECORDS,
     DEFAULT_HISTORY_RETENTION_DAYS,
     DOMAIN,
     EVENT_NOTIFICATION,
 )
 from .calendar_scheduler import async_setup_calendar_notifications
+from .chat_store import ChatStore
+from .chat_websocket_api import async_register_chat_websocket_api
 from .config_snapshot import async_write_config_snapshot
 from .dispatch import (
     async_acknowledge,
@@ -40,9 +49,33 @@ PRUNE_INTERVAL = timedelta(hours=1)
 INACTIVITY_CHECK_INTERVAL = timedelta(minutes=1)
 
 
+def _ensure_chat_channel(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    channels = entry.options.get(CONF_CHANNELS, [])
+    if any(c.get("key") == "chat" for c in channels):
+        return
+    chat_channel = next(c for c in BUILTIN_CHANNELS if c["key"] == "chat")
+    new_channel = {
+        "id": str(uuid.uuid4()),
+        "key": chat_channel["key"],
+        "name": chat_channel["name"],
+        "min_importance": chat_channel["min_importance"],
+        "enabled": True,
+        "color": None,
+        "retention_days": None,
+        "max_records": None,
+    }
+    hass.config_entries.async_update_entry(
+        entry, options={**entry.options, CONF_CHANNELS: [*channels, new_channel]}
+    )
+
+
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    _ensure_chat_channel(hass, entry)
     store = NotificationStore(hass, entry.options.get(CONF_STORAGE_PATH))
     await store.async_load()
+    chat_store = ChatStore(hass, store.storage_dir)
+    await chat_store.async_load()
+    user_names = {user.id: user.name for user in await hass.auth.async_get_users()}
     await async_write_config_snapshot(hass, store, entry.options)
     await async_clear_live_notifications_on_startup(hass, store)
     async_restore_persistent_notifications(hass, store)
@@ -62,10 +95,21 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             entry.options.get(CONF_HISTORY_MAX_RECORDS, DEFAULT_HISTORY_MAX_RECORDS),
             entry.options.get(CONF_HISTORY_RETENTION_DAYS, DEFAULT_HISTORY_RETENTION_DAYS),
         )
+        await chat_store.async_prune(
+            entry.options.get(CONF_CHATROOMS, []),
+            entry.options.get(CONF_CHAT_HISTORY_MAX_DAYS, DEFAULT_CHAT_HISTORY_MAX_DAYS),
+            entry.options.get(CONF_CHAT_HISTORY_MAX_MESSAGES, DEFAULT_CHAT_HISTORY_MAX_MESSAGES),
+        )
         await async_prune_orphaned_images(hass, store)
 
     async def _on_check_inactive(_now) -> None:
         await async_clear_inactive_live_recipients(hass, entry, store)
+
+    async def _on_user_changed(_event: Event) -> None:
+        names = {user.id: user.name for user in await hass.auth.async_get_users()}
+        entry_data = hass.data.get(DOMAIN, {}).get(entry.entry_id)
+        if entry_data is not None:
+            entry_data["user_names"] = names
 
     unsub_event = hass.bus.async_listen(EVENT_NOTIFICATION, _on_notification_event)
     unsub_action = hass.bus.async_listen(MOBILE_APP_ACTION_EVENT, _on_mobile_action)
@@ -74,11 +118,16 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     unsub_persistent = async_register_persistent_notification_listener(hass, store)
     unsub_scheduled = async_setup_scheduled_notifications(hass, entry, store)
     unsub_calendar = async_setup_calendar_notifications(hass, entry, store)
+    unsub_user_added = hass.bus.async_listen("user_added", _on_user_changed)
+    unsub_user_updated = hass.bus.async_listen("user_updated", _on_user_changed)
+    unsub_user_removed = hass.bus.async_listen("user_removed", _on_user_changed)
     unsub_options_update = entry.add_update_listener(_async_reload_entry)
 
     hass.data.setdefault(DOMAIN, {})
     hass.data[DOMAIN][entry.entry_id] = {
         "store": store,
+        "chat_store": chat_store,
+        "user_names": user_names,
         "unsub_event": unsub_event,
         "unsub_action": unsub_action,
         "unsub_prune": unsub_prune,
@@ -86,11 +135,15 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         "unsub_persistent": unsub_persistent,
         "unsub_scheduled": unsub_scheduled,
         "unsub_calendar": unsub_calendar,
+        "unsub_user_added": unsub_user_added,
+        "unsub_user_updated": unsub_user_updated,
+        "unsub_user_removed": unsub_user_removed,
         "unsub_options_update": unsub_options_update,
     }
 
-    async_register_services(hass, entry, store)
+    async_register_services(hass, entry, store, chat_store)
     async_register_websocket_api(hass, store)
+    async_register_chat_websocket_api(hass, entry, store, chat_store)
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     return True
 
@@ -106,6 +159,9 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         entry_data["unsub_persistent"]()
         entry_data["unsub_scheduled"]()
         entry_data["unsub_calendar"]()
+        entry_data["unsub_user_added"]()
+        entry_data["unsub_user_updated"]()
+        entry_data["unsub_user_removed"]()
         entry_data["unsub_options_update"]()
     async_unregister_services(hass)
     return unload_ok

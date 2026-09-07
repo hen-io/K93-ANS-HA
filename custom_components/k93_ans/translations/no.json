@@ -19,6 +19,7 @@
           "manage_channels": "Administrer kanaler",
           "manage_scheduled": "Administrer planlagte varsler",
           "manage_calendar": "Administrer kalendervarsler",
+          "manage_chatrooms": "Administrer chatterom",
           "advanced": "Avansert",
           "finish": "Ferdig"
         }
@@ -37,6 +38,7 @@
           "notify_service": "Varslingstjeneste",
           "person_entity_id": "Person",
           "interactive_entity_id": "Interaktiv-sensor",
+          "linked_user_id": "Tilknyttet bruker",
           "min_importance": "Minimum viktighet",
           "allowed_channels": "Tillatte kanaler",
           "enabled": "Aktivert",
@@ -45,6 +47,7 @@
         "data_description": {
           "person_entity_id": "Valgfritt - kun relevant når et varsel setter \"kun hjemme\"; kreves for at det filteret skal påvirke denne mottakeren i det hele tatt.",
           "interactive_entity_id": "Valgfritt - en binary_sensor som er \"på\" mens denne mottakerens telefon er i bruk. Kreves for inaktivitetstidsavbruddet for direktevarsler under Avansert.",
+          "linked_user_id": "Valgfritt - Home Assistant-brukeren denne mottakerens telefon tilhører. Kreves for at denne mottakeren skal motta et chatterom sin varsel-push for nye meldinger (se Administrer chatterom); har ingen effekt ellers.",
           "min_importance": "Standard minimum viktighet for denne mottakeren - kan overstyres per kanal, i feltene som vises nedenfor etter at et kanalvalg er lagret.",
           "allowed_channels": "Tom = alle kanaler."
         }
@@ -138,16 +141,47 @@
           "target_recipients": "Begrens levering til disse mottakerne (etter navn), samme som send_notifications eget \"target_recipients\"-felt. Tom = vurder alle aktiverte mottakere."
         }
       },
+      "manage_chatrooms": {
+        "title": "Administrer chatterom",
+        "data": {
+          "chatroom": "Chatterom"
+        }
+      },
+      "edit_chatroom": {
+        "title": "Chatterom",
+        "data": {
+          "name": "Navn",
+          "icon": "Ikon",
+          "enabled": "Aktivert",
+          "access_mode": "Tilgang",
+          "allowed_user_ids": "Tillatte brukere",
+          "history_max_days": "Overstyring av lagringstid for historikk (dager)",
+          "history_max_messages": "Overstyring av maks antall meldinger",
+          "new_message_alert": "Varsel om ny melding",
+          "remove": "Fjern dette chatterommet"
+        },
+        "data_description": {
+          "icon": "Et mdi:-ikon, f.eks. mdi:forum. Tom = standard.",
+          "allowed_user_ids": "Ignoreres når Tilgang er \"Alle brukere\". Kun disse brukerne kan lese dette chatterommets historikk eller sende meldinger til det.",
+          "history_max_days": "Tom = bruk de globale \"Chat-historikk\"-innstillingene under Avansert.",
+          "history_max_messages": "Tom = bruk de globale \"Chat-historikk\"-innstillingene under Avansert.",
+          "new_message_alert": "Hvis sann, sender en ny melding en varsel-push til alle andre medlemmers telefon (via deres mottakers egen \"Tilknyttet bruker\", se Administrer mottakere) som fjernes automatisk når de leser dette chatterommet. Vises aldri på den delte varslingsklokken - leveres kun til medlemmer som faktisk har tilgang."
+        }
+      },
       "advanced": {
         "title": "Avansert",
         "data": {
           "history_retention_days": "Lagringstid for historikk (dager)",
           "history_max_records": "Maks antall i historikk",
+          "chat_history_max_days": "Lagringstid for chat-historikk (dager)",
+          "chat_history_max_messages": "Maks antall meldinger i chat-historikk",
           "language": "Språk",
           "live_inactivity_timeout_minutes": "Inaktivitetstidsavbrudd for direktevarsler (minutter)",
           "storage_path": "Lagringsmappe for varslingshistorikk"
         },
         "data_description": {
+          "chat_history_max_days": "Standard for et chatteroms egen lagringstid, med mindre det setter sin egen overstyring.",
+          "chat_history_max_messages": "Standard for et chatteroms eget maks antall meldinger, med mindre det setter sin egen overstyring.",
           "language": "Brukt for utgående varslingstekst, f.eks. Bekreft-knappen.",
           "live_inactivity_timeout_minutes": "0 = deaktivert. For varsler sendt med interactive_only: true, fjerner en direktevarsel-push for en mottaker når deres interaktiv-sensor har vært \"av\" så lenge.",
           "storage_path": "Tom = standard K93-Advanced-Notification-System-mappe. Absolutt, eller relativ til Home Assistants konfigurasjonsmappe; må være skrivbar for Home Assistant. database.db-filen inni den heter det uansett. Eksisterende historikk flyttes automatisk. Trer i kraft med én gang du lagrer."
