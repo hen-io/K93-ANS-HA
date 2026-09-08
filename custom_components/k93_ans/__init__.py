@@ -16,6 +16,7 @@ from .const import (
     CONF_CHATROOMS,
     CONF_HISTORY_MAX_RECORDS,
     CONF_HISTORY_RETENTION_DAYS,
+    CONF_RECIPIENTS,
     CONF_STORAGE_PATH,
     DEFAULT_CHAT_HISTORY_MAX_DAYS,
     DEFAULT_CHAT_HISTORY_MAX_MESSAGES,
@@ -51,21 +52,39 @@ INACTIVITY_CHECK_INTERVAL = timedelta(minutes=1)
 
 def _ensure_chat_channel(hass: HomeAssistant, entry: ConfigEntry) -> None:
     channels = entry.options.get(CONF_CHANNELS, [])
-    if any(c.get("key") == "chat" for c in channels):
+    changed = False
+
+    if not any(c.get("key") == "chat" for c in channels):
+        chat_channel = next(c for c in BUILTIN_CHANNELS if c["key"] == "chat")
+        channels = [
+            *channels,
+            {
+                "id": str(uuid.uuid4()),
+                "key": chat_channel["key"],
+                "name": chat_channel["name"],
+                "min_importance": chat_channel["min_importance"],
+                "enabled": True,
+                "color": None,
+                "retention_days": None,
+                "max_records": None,
+            },
+        ]
+        changed = True
+
+    recipients = entry.options.get(CONF_RECIPIENTS, [])
+    new_recipients = []
+    for recipient in recipients:
+        allowed_channels = recipient.get("allowed_channels") or []
+        if allowed_channels and "chat" not in allowed_channels:
+            recipient = {**recipient, "allowed_channels": [*allowed_channels, "chat"]}
+            changed = True
+        new_recipients.append(recipient)
+
+    if not changed:
         return
-    chat_channel = next(c for c in BUILTIN_CHANNELS if c["key"] == "chat")
-    new_channel = {
-        "id": str(uuid.uuid4()),
-        "key": chat_channel["key"],
-        "name": chat_channel["name"],
-        "min_importance": chat_channel["min_importance"],
-        "enabled": True,
-        "color": None,
-        "retention_days": None,
-        "max_records": None,
-    }
     hass.config_entries.async_update_entry(
-        entry, options={**entry.options, CONF_CHANNELS: [*channels, new_channel]}
+        entry,
+        options={**entry.options, CONF_CHANNELS: channels, CONF_RECIPIENTS: new_recipients},
     )
 
 
