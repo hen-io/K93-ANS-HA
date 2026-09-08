@@ -4,6 +4,7 @@ import uuid
 from datetime import timedelta
 
 from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import EVENT_HOMEASSISTANT_STARTED
 from homeassistant.core import Event, HomeAssistant
 from homeassistant.helpers.event import async_track_time_interval
 
@@ -96,8 +97,17 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     await chat_store.async_load()
     user_names = {user.id: user.name for user in await hass.auth.async_get_users()}
     await async_write_config_snapshot(hass, store, entry.options)
-    await async_clear_live_notifications_on_startup(hass, store)
-    async_restore_persistent_notifications(hass, store)
+    unsub_started = None
+    if hass.is_running:
+        await async_clear_live_notifications_on_startup(hass, store)
+        async_restore_persistent_notifications(hass, store)
+    else:
+
+        async def _on_started(_event: Event) -> None:
+            await async_clear_live_notifications_on_startup(hass, store)
+            async_restore_persistent_notifications(hass, store)
+
+        unsub_started = hass.bus.async_listen_once(EVENT_HOMEASSISTANT_STARTED, _on_started)
 
     async def _on_notification_event(event: Event) -> None:
         await async_handle_notification_event(hass, entry, store, event)
@@ -158,6 +168,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         "unsub_user_updated": unsub_user_updated,
         "unsub_user_removed": unsub_user_removed,
         "unsub_options_update": unsub_options_update,
+        "unsub_started": unsub_started,
     }
 
     async_register_services(hass, entry, store, chat_store)
@@ -182,6 +193,8 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         entry_data["unsub_user_updated"]()
         entry_data["unsub_user_removed"]()
         entry_data["unsub_options_update"]()
+        if entry_data.get("unsub_started"):
+            entry_data["unsub_started"]()
     async_unregister_services(hass)
     return unload_ok
 
