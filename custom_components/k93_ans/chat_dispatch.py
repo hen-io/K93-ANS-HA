@@ -140,14 +140,31 @@ async def _send_chat_alerts(
     if len(preview) > _MESSAGE_PREVIEW_MAX_LEN:
         preview = preview[: _MESSAGE_PREVIEW_MAX_LEN - 1] + "…"
 
+    _LOGGER.warning(
+        "K93 ANS chat alert: chatroom=%s new_message_alert=%s sender=%s members=%s",
+        chatroom.get("id"),
+        chatroom.get("new_message_alert"),
+        sender_user_id,
+        members,
+    )
+
     for member_user_id in members:
         if member_user_id == sender_user_id:
             continue
         if chat_store.async_unread_count(chatroom["id"], member_user_id) <= 0:
+            _LOGGER.warning(
+                "K93 ANS chat alert: member=%s already caught up, skipping", member_user_id
+            )
             continue
 
         recipient_ids = _linked_recipient_ids(entry, member_user_id)
         if not recipient_ids:
+            _LOGGER.warning(
+                "K93 ANS chat alert: member=%s has no Recipient with a matching 'Linked user' - "
+                "skipping, nothing to push to. Set that member's account as the 'Linked user' on "
+                "one of their Recipients (Manage recipients) to receive a push.",
+                member_user_id,
+            )
             continue
 
         alert_fields: dict[str, Any] = {
